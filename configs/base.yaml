@@ -1,0 +1,19 @@
+# Shared settings for every stage. Paths are relative to the project root.
+paths:
+  raw: data/raw/UCI_Credit_Card.csv
+  processed_dir: data/processed
+  reports_dir: reports
+  artifacts_dir: artifacts
+
+# sha256 of the committed raw CSV; `make data` checks it.
+raw_sha256: a0f0ab49d6326671d6cd83be5c88dcf18007025fe9a53ecd699119c871176ca1
+
+seed: 573
+test_size: 0.2
+cv_folds: 5
+
+# Cost of each error type, used to choose the decision threshold.
+# Starting values only; chosen and justified in milestone M5.
+costs:
+  false_negative: 5.0   # missed defaulter
+  false_positive: 1.0   # false alarm on a client who would have paid

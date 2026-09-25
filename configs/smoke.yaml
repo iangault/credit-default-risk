@@ -1,0 +1,4 @@
+# Small, fast run of the whole pipeline for CI (`make smoke`).
+extends: base.yaml
+sample_rows: 1000
+cv_folds: 2
