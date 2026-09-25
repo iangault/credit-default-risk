@@ -53,3 +53,14 @@ def test_no_stage_is_a_usage_error():
     with pytest.raises(SystemExit) as exc:
         main([])
     assert exc.value.code == 2
+
+
+def test_malformed_yaml_prints_error_not_traceback(tmp_path, capsys):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n")
+    config = tmp_path / "bad.yaml"
+    config.write_text("seed: [1\n")
+    code = main(["--config", str(config), "data"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert err.startswith("error:")
+    assert "Traceback" not in err

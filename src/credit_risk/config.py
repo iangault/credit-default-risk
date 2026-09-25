@@ -90,7 +90,10 @@ def _read_yaml(path: Path, seen: frozenset[Path]) -> dict[str, Any]:
         raise ConfigError(f"Config 'extends' cycle involving {path}")
     if not path.is_file():
         raise ConfigError(f"Config file not found: {path}")
-    data = yaml.safe_load(path.read_text())
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
+        raise ConfigError(f"Could not read config file {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError(f"Config file {path} must contain a YAML mapping of keys to values")
     parent = data.pop("extends", None)

@@ -152,3 +152,16 @@ def test_repo_configs_load():
     assert smoke.cv_folds == 2
     assert smoke.sample_rows == 1000
     assert smoke.paths == base.paths
+
+
+def test_malformed_yaml_raises_config_error_naming_file(project):
+    path = write(project, "broken.yaml", "seed: [1\n")
+    with pytest.raises(ConfigError, match="broken.yaml"):
+        load_config(path)
+
+
+def test_non_utf8_config_raises_config_error(project):
+    path = project / "configs" / "binary.yaml"
+    path.write_bytes(b"\xff\xfe\x00seed: 1")
+    with pytest.raises(ConfigError, match="binary.yaml"):
+        load_config(path)

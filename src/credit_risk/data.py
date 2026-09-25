@@ -29,7 +29,10 @@ def verify_raw(cfg: Config) -> None:
             f"Raw data not found at {path}. It is committed to the repo; "
             f"restore it with `git checkout -- {path.name}` from its folder."
         )
-    actual = sha256_of(path)
+    try:
+        actual = sha256_of(path)
+    except OSError as exc:
+        raise DataFileError(f"Raw data at {path} could not be read: {exc}") from exc
     if actual != cfg.raw_sha256:
         raise DataFileError(
             f"Raw data at {path} has changed.\n"

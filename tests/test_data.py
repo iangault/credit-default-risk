@@ -57,3 +57,14 @@ def test_committed_raw_csv_matches_base_config():
 def test_gitattributes_keeps_raw_csv_byte_exact():
     rules = (ROOT / ".gitattributes").read_text().splitlines()
     assert "data/raw/*.csv -text" in rules
+
+
+def test_verify_raw_raises_data_file_error_when_unreadable(tmp_path):
+    f = tmp_path / "raw.csv"
+    f.write_bytes(b"abc")
+    f.chmod(0o000)
+    try:
+        with pytest.raises(DataFileError, match="could not be read"):
+            verify_raw(make_config(f, ABC_SHA256))
+    finally:
+        f.chmod(0o644)
