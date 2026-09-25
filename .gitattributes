@@ -1,0 +1,2 @@
+# Keep raw data byte-for-byte so its sha256 check holds on every OS.
+data/raw/*.csv -text
