@@ -157,7 +157,10 @@ def test_repo_configs_load():
     assert base.sample_rows is None
     assert smoke.cv_folds == 2
     assert smoke.sample_rows == 1000
-    assert smoke.paths == base.paths
+    assert smoke.paths.raw == base.paths.raw
+    assert smoke.paths.processed_dir != base.paths.processed_dir
+    assert smoke.paths.reports_dir != base.paths.reports_dir
+    assert smoke.paths.artifacts_dir != base.paths.artifacts_dir
 
 
 def test_malformed_yaml_raises_config_error_naming_file(project):

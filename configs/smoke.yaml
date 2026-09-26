@@ -1,4 +1,9 @@
 # Small, fast run of the whole pipeline for CI (`make smoke`).
+# Outputs go to separate folders so a smoke run never overwrites full-size results.
 extends: base.yaml
 sample_rows: 1000
 cv_folds: 2
+paths:
+  processed_dir: data/processed/smoke
+  reports_dir: reports/smoke
+  artifacts_dir: artifacts/smoke

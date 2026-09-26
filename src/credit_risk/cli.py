@@ -9,11 +9,10 @@ import argparse
 import sys
 
 from credit_risk.config import Config, ConfigError, default_config_path, load_config
-from credit_risk.data import DataFileError, verify_raw
+from credit_risk.data import TARGET, DataFileError, clean, load_raw, save_splits, split, verify_raw
 
 # Stages not built yet, and the milestone that builds each one.
 _PENDING = {
-    "split": "M1",
     "experiments": "M2",
     "train": "M5",
     "evaluate": "M6",
@@ -26,7 +25,16 @@ def _run_data(cfg: Config) -> None:
     print(f"OK: {cfg.paths.raw} matches the expected sha256.")
 
 
-_STAGES = {"data": _run_data}
+def _run_split(cfg: Config) -> None:
+    train, test = split(clean(load_raw(cfg)), cfg)
+    save_splits(train, test, cfg)
+    print(
+        f"Wrote {len(train)} train and {len(test)} test rows to {cfg.paths.processed_dir} "
+        f"(default rate: train {train[TARGET].mean():.3f}, test {test[TARGET].mean():.3f})."
+    )
+
+
+_STAGES = {"data": _run_data, "split": _run_split}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stages = parser.add_subparsers(dest="stage", required=True, metavar="STAGE")
     stages.add_parser("data", help="check the raw CSV against its expected sha256")
+    stages.add_parser("split", help="clean the raw data and write a stratified train/test split")
     for name, milestone in _PENDING.items():
         stages.add_parser(name, help=f"not implemented yet (milestone {milestone})")
     return parser
