@@ -13,7 +13,7 @@ test_size: 0.2
 cv_folds: 5
 
 # Cost of each error type, used to choose the decision threshold.
-# Starting values only; chosen and justified in milestone M5.
+# Starting values only; to be chosen and justified with the decision threshold work.
 costs:
   false_negative: 5.0   # missed defaulter
   false_positive: 1.0   # false alarm on a client who would have paid

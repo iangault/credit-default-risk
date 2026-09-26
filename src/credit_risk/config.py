@@ -64,8 +64,13 @@ def default_config_path() -> Path:
     return find_project_root(Path.cwd()) / "configs" / "base.yaml"
 
 
+# `path: str | Path` is a type hint: path may be a plain string ("configs/base.yaml")
+# or a pathlib.Path object. The `|` means "or". `-> Config` says what comes back.
+# Hints are not enforced at runtime; they document intent and let editors catch mistakes.
 def load_config(path: str | Path) -> Config:
     """Read a YAML config (following `extends`), validate it, and return a Config."""
+    # Convert to a Path whatever was passed, so the code below handles one type.
+    # resolve() turns a relative path into a full absolute one.
     path = Path(path).resolve()
     data = _read_yaml(path, frozenset())
     _check_keys("config", data, _TOP_REQUIRED, _TOP_OPTIONAL)

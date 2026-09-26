@@ -16,20 +16,6 @@ def test_data_stage_passes_on_committed_csv(capsys):
     assert "OK" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    ("stage", "milestone"),
-    [
-        ("experiments", "M2"),
-        ("train", "M5"),
-        ("evaluate", "M6"),
-        ("explain", "M6"),
-    ],
-)
-def test_pending_stages_exit_zero_and_name_milestone(stage, milestone, capsys):
-    assert main(["--config", BASE, stage]) == 0
-    assert milestone in capsys.readouterr().out
-
-
 def test_missing_config_prints_error_and_returns_1(tmp_path, capsys):
     code = main(["--config", str(tmp_path / "nope.yaml"), "data"])
     err = capsys.readouterr().err

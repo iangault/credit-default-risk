@@ -1,6 +1,8 @@
 """Command-line entry point: one subcommand per pipeline stage.
 
-Usage: credit-risk [--config PATH] {data,split,experiments,train,evaluate,explain}
+Usage: credit-risk [--config PATH] {data,split}
+
+Add a subcommand here as each new stage is built.
 """
 
 from __future__ import annotations
@@ -10,14 +12,6 @@ import sys
 
 from credit_risk.config import Config, ConfigError, default_config_path, load_config
 from credit_risk.data import TARGET, DataFileError, clean, load_raw, save_splits, split, verify_raw
-
-# Stages not built yet, and the milestone that builds each one.
-_PENDING = {
-    "experiments": "M2",
-    "train": "M5",
-    "evaluate": "M6",
-    "explain": "M6",
-}
 
 
 def _run_data(cfg: Config) -> None:
@@ -49,8 +43,6 @@ def build_parser() -> argparse.ArgumentParser:
     stages = parser.add_subparsers(dest="stage", required=True, metavar="STAGE")
     stages.add_parser("data", help="check the raw CSV against its expected sha256")
     stages.add_parser("split", help="clean the raw data and write a stratified train/test split")
-    for name, milestone in _PENDING.items():
-        stages.add_parser(name, help=f"not implemented yet (milestone {milestone})")
     return parser
 
 
@@ -58,13 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         cfg = load_config(args.config or default_config_path())
-        if args.stage in _STAGES:
-            _STAGES[args.stage](cfg)
-        else:
-            print(
-                f"Stage '{args.stage}' is not implemented yet "
-                f"(planned for milestone {_PENDING[args.stage]})."
-            )
+        _STAGES[args.stage](cfg)
     except (ConfigError, DataFileError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
