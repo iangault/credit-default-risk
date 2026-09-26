@@ -59,6 +59,11 @@ def find_project_root(start: Path) -> Path:
     raise ConfigError(f"No pyproject.toml found at or above {start}; cannot locate project root.")
 
 
+def default_config_path() -> Path:
+    """Return configs/base.yaml for the project containing the current working directory."""
+    return find_project_root(Path.cwd()) / "configs" / "base.yaml"
+
+
 def load_config(path: str | Path) -> Config:
     """Read a YAML config (following `extends`), validate it, and return a Config."""
     path = Path(path).resolve()

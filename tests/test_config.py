@@ -3,7 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from credit_risk.config import Config, ConfigError, find_project_root, load_config
+from credit_risk.config import (
+    Config,
+    ConfigError,
+    default_config_path,
+    find_project_root,
+    load_config,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -165,3 +171,8 @@ def test_non_utf8_config_raises_config_error(project):
     path.write_bytes(b"\xff\xfe\x00seed: 1")
     with pytest.raises(ConfigError, match="binary.yaml"):
         load_config(path)
+
+
+def test_default_config_path_found_from_subfolder(monkeypatch):
+    monkeypatch.chdir(ROOT / "src")
+    assert default_config_path() == ROOT / "configs" / "base.yaml"

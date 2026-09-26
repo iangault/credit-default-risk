@@ -8,10 +8,8 @@ from __future__ import annotations
 import argparse
 import sys
 
-from credit_risk.config import Config, ConfigError, load_config
+from credit_risk.config import Config, ConfigError, default_config_path, load_config
 from credit_risk.data import DataFileError, verify_raw
-
-DEFAULT_CONFIG = "configs/base.yaml"
 
 # Stages not built yet, and the milestone that builds each one.
 _PENDING = {
@@ -36,7 +34,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="credit-risk", description="Run one stage of the credit default pipeline."
     )
     parser.add_argument(
-        "--config", default=DEFAULT_CONFIG, help=f"YAML config file (default: {DEFAULT_CONFIG})"
+        "--config",
+        default=None,
+        help="YAML config file (default: configs/base.yaml in this project)",
     )
     stages = parser.add_subparsers(dest="stage", required=True, metavar="STAGE")
     stages.add_parser("data", help="check the raw CSV against its expected sha256")
@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config or default_config_path())
         if args.stage in _STAGES:
             _STAGES[args.stage](cfg)
         else:

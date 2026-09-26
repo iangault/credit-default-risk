@@ -3,6 +3,7 @@ CONFIG ?= configs/base.yaml
 RUN := credit-risk --config $(CONFIG)
 
 .PHONY: help setup lint format test data split experiments train evaluate explain all smoke
+.NOTPARALLEL:
 
 help:
 	@echo "setup        create/update the conda env and git hooks"

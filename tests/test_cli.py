@@ -64,3 +64,14 @@ def test_malformed_yaml_prints_error_not_traceback(tmp_path, capsys):
     assert code == 1
     assert err.startswith("error:")
     assert "Traceback" not in err
+
+
+def test_cli_finds_default_config_from_subfolder(monkeypatch, capsys):
+    monkeypatch.chdir(ROOT / "src")
+    assert main(["data"]) == 0
+    assert "OK" in capsys.readouterr().out
+
+
+def test_makefile_runs_stages_in_order():
+    lines = (ROOT / "Makefile").read_text().splitlines()
+    assert ".NOTPARALLEL:" in lines
