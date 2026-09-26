@@ -18,8 +18,9 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
+from sklearn.model_selection import train_test_split
 
-from credit_risk.config import Config
+from credit_risk.config import Config, default_config_path, load_config
 
 RAW_TARGET = "default.payment.next.month"
 TARGET = "default"
@@ -41,6 +42,8 @@ _ALLOWED_VALUES = {
     TARGET: {0, 1},
     **{col: set(range(-2, 9)) for col in PAY_STATUS},
 }
+
+SPLITS = ("train", "test")
 
 
 class DataFileError(RuntimeError):
@@ -103,3 +106,40 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
                 f"Column {col} has unexpected value(s) {unexpected}; expected {sorted(allowed)}"
             )
     return out
+
+
+def split(df: pd.DataFrame, cfg: Config) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Stratified train/test split, after an optional stratified sample of cfg.sample_rows."""
+    if cfg.sample_rows is not None and cfg.sample_rows < len(df):
+        df, _ = train_test_split(
+            df, train_size=cfg.sample_rows, stratify=df[TARGET], random_state=cfg.seed
+        )
+    train, test = train_test_split(
+        df, test_size=cfg.test_size, stratify=df[TARGET], random_state=cfg.seed
+    )
+    return _tidy(train), _tidy(test)
+
+
+def _tidy(df: pd.DataFrame) -> pd.DataFrame:
+    return df.sort_values("ID").reset_index(drop=True)
+
+
+def split_path(name: str, cfg: Config) -> Path:
+    return cfg.paths.processed_dir / f"{name}.parquet"
+
+
+def save_splits(train: pd.DataFrame, test: pd.DataFrame, cfg: Config) -> None:
+    cfg.paths.processed_dir.mkdir(parents=True, exist_ok=True)
+    train.to_parquet(split_path("train", cfg), index=False)
+    test.to_parquet(split_path("test", cfg), index=False)
+
+
+def load_split(name: str, cfg: Config | None = None) -> pd.DataFrame:
+    """Load the train or test split. With no cfg, uses this project's configs/base.yaml."""
+    if name not in SPLITS:
+        raise ValueError(f"name must be one of {SPLITS}, got {name!r}")
+    cfg = cfg or load_config(default_config_path())
+    path = split_path(name, cfg)
+    if not path.is_file():
+        raise DataFileError(f"{path} not found. Run `make split` first.")
+    return pd.read_parquet(path)
