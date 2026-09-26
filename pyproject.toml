@@ -21,6 +21,7 @@ packages = ["src/credit_risk"]
 [tool.ruff]
 line-length = 99
 target-version = "py312"
+extend-exclude = ["docs"]  # code blocks in plans and specs are illustrative, not source
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
