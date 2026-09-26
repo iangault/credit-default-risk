@@ -81,9 +81,15 @@ the course's policy on publishing derived work.
 
 ## Tooling
 
-- Python 3.12, `uv` with `pyproject.toml` and committed `uv.lock`.
-- Package in `src/` layout, installed in editable mode by `uv sync`,
-  with a `credit-risk` console script.
+> Changed 2026-09-25 after M0: switched from uv to conda so the author
+> works with a familiar environment tool while learning the rest.
+> `environment.yml` lists dependencies; `pyproject.toml` only makes the
+> package installable (`pip install -e .` from inside environment.yml).
+
+- Python 3.12, conda (conda-forge) with `environment.yml`.
+- Package in `src/` layout, installed in editable mode by the
+  `pip: [-e .]` entry in `environment.yml`, with a `credit-risk`
+  console script.
 - `ruff` (lint and format), `pre-commit`, `pytest`.
 - GitHub Actions CI.
 - Makefile as the runner: `setup`, `lint`, `test`, and one target per
@@ -95,7 +101,7 @@ the course's policy on publishing derived work.
 
 ```
 credit-default-risk/
-├── pyproject.toml, uv.lock, Makefile, README.md, .pre-commit-config.yaml
+├── environment.yml, pyproject.toml, Makefile, README.md, .pre-commit-config.yaml
 ├── .github/workflows/ci.yml
 ├── configs/
 │   ├── base.yaml          # paths, seed, CV folds, test size, cost matrix
@@ -215,7 +221,7 @@ plan when reached.
 
 | # | Milestone | Owner | Done when |
 |---|---|---|---|
-| M0 | Scaffold: uv, ruff, pre-commit, CI, Makefile, `config.py`, `cli.py` stubs, raw CSV, README skeleton with attribution, learning log | Claude | `make setup lint test` passes locally and in CI with stub stages |
+| M0 | Scaffold: conda env, ruff, pre-commit, CI, Makefile, `config.py`, `cli.py` stubs, raw CSV, README skeleton with attribution, learning log | Claude | `make setup lint test` passes locally and in CI with stub stages |
 | M1 | Data: `clean()`, stratified split, data tests; then the author's EDA notebook focused on quirks and feature ideas | Claude, then author | `make split` produces both files and tests pass |
 | M2 | Baseline rebuild: `preprocess.py` (Claude), `models.py` (author), `pipeline.py` (together), minimal `experiments.py` with dummy, logistic regression, LightGBM | Mixed | CV ROC-AUC for LightGBM is near the lab's (about 0.78), confirming the setup |
 | M3 | Imbalance experiments: class weights vs SMOTE vs random undersampling, PR-AUC added | Author | Comparison table plus a short explanation of why ROC-AUC changes little |

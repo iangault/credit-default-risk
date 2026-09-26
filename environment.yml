@@ -1,0 +1,17 @@
+# Conda environment for the project.
+# Create it once with `make setup` (or `conda env create -f environment.yml`),
+# then `conda activate credit-risk` before running make targets.
+name: credit-risk
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pandas>=2.2
+  - pyyaml>=6.0
+  # dev tools
+  - pytest>=8.0
+  - ruff>=0.6
+  - pre-commit>=3.7
+  - pip
+  - pip:
+      - -e .   # install this repo's src/credit_risk package in editable mode

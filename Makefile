@@ -1,10 +1,11 @@
+ENV := credit-risk
 CONFIG ?= configs/base.yaml
-RUN := uv run credit-risk --config $(CONFIG)
+RUN := credit-risk --config $(CONFIG)
 
 .PHONY: help setup lint format test data split experiments train evaluate explain all smoke
 
 help:
-	@echo "setup        install dependencies and git hooks"
+	@echo "setup        create/update the conda env and git hooks"
 	@echo "lint         check style with ruff"
 	@echo "format       auto-format with ruff"
 	@echo "test         run pytest"
@@ -19,19 +20,20 @@ help:
 	@echo "Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml"
 
 setup:
-	uv sync
-	uv run pre-commit install
+	conda env create -f environment.yml || conda env update -n $(ENV) -f environment.yml --prune
+	conda run -n $(ENV) pre-commit install
+	@echo "Done. Run: conda activate $(ENV)"
 
 lint:
-	uv run ruff check .
-	uv run ruff format --check .
+	ruff check .
+	ruff format --check .
 
 format:
-	uv run ruff format .
-	uv run ruff check --fix .
+	ruff format .
+	ruff check --fix .
 
 test:
-	uv run pytest
+	pytest
 
 data:
 	$(RUN) data

@@ -16,12 +16,13 @@ cost of each type of error, rather than the default 0.5 cutoff.
 
 ## Quickstart
 
-Requires [uv](https://docs.astral.sh/uv/) and `make`.
+Requires [conda](https://conda-forge.org/download/) (Miniforge recommended) and `make`.
 
 ```bash
-make setup   # install dependencies and git hooks
-make test    # run the test suite
-make all     # run the pipeline end to end
+make setup                # create the conda env from environment.yml, install git hooks
+conda activate credit-risk
+make test                 # run the test suite
+make all                  # run the pipeline end to end
 ```
 
 Each stage can also be run on its own (`make data`, `make split`, ...). Use a different

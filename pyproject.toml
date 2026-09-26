@@ -1,13 +1,12 @@
+# Makes src/credit_risk an installable package, so `from credit_risk... import ...`
+# works from notebooks and tests. Dependencies live in environment.yml.
 [project]
 name = "credit-risk"
 version = "0.1.0"
 description = "Credit card default prediction as a modular, reproducible ML pipeline."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = [
-    "pandas>=2.2",
-    "pyyaml>=6.0",
-]
+dependencies = []
 
 [project.scripts]
 credit-risk = "credit_risk.cli:main"
@@ -18,13 +17,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/credit_risk"]
-
-[dependency-groups]
-dev = [
-    "pytest>=8.0",
-    "ruff>=0.6",
-    "pre-commit>=3.7",
-]
 
 [tool.ruff]
 line-length = 99
