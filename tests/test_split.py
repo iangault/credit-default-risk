@@ -98,3 +98,20 @@ def test_load_split_uses_project_config_by_default(monkeypatch):
         assert str(ROOT / "data" / "processed") in str(exc)
     else:
         assert TARGET in df.columns
+
+
+def test_load_split_rejects_split_made_with_other_settings(cleaned, tmp_path):
+    cfg = cfg_with(tmp_path)
+    train, test = split(cleaned, cfg)
+    save_splits(train, test, cfg)
+    with pytest.raises(DataFileError, match="make split"):
+        load_split("train", cfg_with(tmp_path, seed=1))
+
+
+def test_load_split_rejects_split_without_settings_file(cleaned, tmp_path):
+    cfg = cfg_with(tmp_path)
+    train, test = split(cleaned, cfg)
+    save_splits(train, test, cfg)
+    (tmp_path / "processed" / "split_settings.json").unlink()
+    with pytest.raises(DataFileError, match="make split"):
+        load_split("train", cfg)
