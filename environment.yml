@@ -12,10 +12,15 @@ dependencies:
   - pyarrow>=15
   - jupyterlab>=4
   - altair>=5
+  # vegafusion pre-aggregates chart data in Python so notebooks don't embed raw rows;
+  # it needs vl-convert. 2.x was only a release candidate when added.
+  - vegafusion>=2
+  - vl-convert-python>=1.6,<2
   # dev tools
   - pytest>=8.0
   - ruff>=0.6
   - pre-commit>=3.7
   - pip
   - pip:
+      - altair_ally   # EDA helpers (aly.dist, aly.corr); not on conda-forge
       - -e .   # install this repo's src/credit_risk package in editable mode
