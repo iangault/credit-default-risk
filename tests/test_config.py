@@ -161,6 +161,8 @@ def test_repo_configs_load():
     assert smoke.paths.processed_dir != base.paths.processed_dir
     assert smoke.paths.reports_dir != base.paths.reports_dir
     assert smoke.paths.artifacts_dir != base.paths.artifacts_dir
+    assert [e.name for e in base.experiments] == ["dummy", "logreg", "lgbm"]
+    assert smoke.experiments == base.experiments
 
 
 def test_malformed_yaml_raises_config_error_naming_file(project):
@@ -179,3 +181,40 @@ def test_non_utf8_config_raises_config_error(project):
 def test_default_config_path_found_from_subfolder(monkeypatch):
     monkeypatch.chdir(ROOT / "src")
     assert default_config_path() == ROOT / "configs" / "base.yaml"
+
+
+def test_experiments_parsed_in_order(project):
+    path = write(
+        project,
+        "exp.yaml",
+        """\
+        extends: base.yaml
+        experiments:
+          - {name: base, model: logreg}
+          - {name: strong_reg, model: logreg, params: {C: 0.1}}
+        """,
+    )
+    cfg = load_config(path)
+    assert [e.name for e in cfg.experiments] == ["base", "strong_reg"]
+    assert cfg.experiments[0].params == {}
+    assert cfg.experiments[1].params == {"C": 0.1}
+
+
+def test_experiments_default_to_empty(project):
+    assert load_config(project / "configs" / "base.yaml").experiments == ()
+
+
+@pytest.mark.parametrize(
+    ("block", "fragment"),
+    [
+        ("experiments: []", "experiments"),
+        ("experiments:\n  - {name: a}", "model"),
+        ("experiments:\n  - {name: a, model: m, parms: {}}", "parms"),
+        ("experiments:\n  - {name: a, model: m, params: 3}", "params"),
+        ("experiments:\n  - {name: a, model: m}\n  - {name: a, model: n}", "Duplicate"),
+    ],
+)
+def test_invalid_experiments_raise(project, block, fragment):
+    path = write(project, "bad.yaml", f"extends: base.yaml\n{block}\n")
+    with pytest.raises(ConfigError, match=fragment):
+        load_config(path)

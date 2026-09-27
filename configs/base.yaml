@@ -17,3 +17,10 @@ cv_folds: 5
 costs:
   false_negative: 5.0   # missed defaulter
   false_positive: 1.0   # false alarm on a client who would have paid
+
+# Setups compared by `make experiments`, all on the same CV folds.
+# model: a name from credit_risk.models; params: passed to that model.
+experiments:
+  - {name: dummy, model: dummy}
+  - {name: logreg, model: logreg}
+  - {name: lgbm, model: lgbm}
