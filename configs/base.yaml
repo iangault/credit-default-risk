@@ -23,4 +23,6 @@ costs:
 experiments:
   - {name: dummy, model: dummy}
   - {name: logreg, model: logreg}
+  - {name: forest, model: forest}
   - {name: lgbm, model: lgbm}
+  - {name: xgboost, model: xgboost}
