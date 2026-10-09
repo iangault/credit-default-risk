@@ -50,7 +50,7 @@ The modules in `src/credit_risk/`, in the order the pipeline uses them:
 | 2 | `preprocess.py` | Scale amounts, one-hot encode categories | (inside the pipeline) |
 | 3 | `models.py` | Turn a model name from the config into an unfitted model | (inside the pipeline) |
 | 4 | `pipeline.py` | Join the preprocessor and a model into one object | (inside experiments) |
-| 5 | `experiments.py` | Cross-validate each model and write a results table | `make experiments` (in progress) |
+| 5 | `experiments.py` | Cross-validate each model and write a results table | `make experiments` |
 | | `cli.py` | The `credit-risk` command; runs one stage at a time | |
 
 `make` targets call the `credit-risk` command, which calls the modules. Run `make help`

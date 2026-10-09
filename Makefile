@@ -2,7 +2,7 @@ ENV := credit-risk
 CONFIG ?= configs/base.yaml
 RUN := credit-risk --config $(CONFIG)
 
-.PHONY: help setup lint format test data split all smoke
+.PHONY: help setup lint format test data split experiments all smoke
 .NOTPARALLEL:
 
 # Colors only when printing to a terminal; set NO_COLOR=1 to turn them off.
@@ -15,6 +15,7 @@ help:
 	printf "\n$${b}Pipeline stages$${r} $${d}(run in this order)$${r}\n"; \
 	row "data"       "1. check the raw CSV hash"                "data.py"; \
 	row "split"      "2. clean and split into train/test"       "data.py"; \
+	row "experiments" "3. cross-validate each model on train"   "experiments.py"; \
 	row "all"        "run every stage in order"                 ""; \
 	row "smoke"      "every stage on a small sample (CI)"       "configs/smoke.yaml"; \
 	printf "\n$${b}Development$${r}\n"; \
@@ -54,7 +55,10 @@ data:
 split:
 	$(RUN) split
 
-all: data split
+experiments:
+	$(RUN) experiments
+
+all: data split experiments
 
 smoke:
 	$(MAKE) all CONFIG=configs/smoke.yaml
