@@ -14,7 +14,7 @@ One entry per milestone, explaining what was built and why, as if in an intervie
 
 ---
 
-### M2: Baseline models (in progress, notes from 2026-10-09)
+### M2: Baseline models (2026-10-09)
 
 #### 1. The problem
 
