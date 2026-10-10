@@ -47,11 +47,12 @@ The modules in `src/credit_risk/`, in the order the pipeline uses them:
 |---|---|---|---|
 | | `config.py` | Reads settings from `configs/*.yaml`; used by every step | |
 | 1 | `data.py` | Load, clean, and split into train/test | `make data`, `make split` |
-| 2 | `preprocess.py` | Scale amounts (step 1), one-hot encode categories (step 2) | (inside the pipeline) |
-| 3 | `samplers.py` | Turn a sampler name into a resampler that evens out the classes | (inside the pipeline) |
-| 4 | `models.py` | Turn a model name from the config into an unfitted model | (inside the pipeline) |
-| 5 | `pipeline.py` | Chain scaling, optional resampling, encoding, and a model into one object | (inside experiments) |
-| 6 | `experiments.py` | Cross-validate each setup and write a results table | `make experiments` |
+| 2 | `features.py` | Add engineered columns (late months, payment ratio, utilization, trends) | (inside the pipeline) |
+| 3 | `preprocess.py` | Scale amounts (step 1), one-hot encode categories (step 2) | (inside the pipeline) |
+| 4 | `samplers.py` | Turn a sampler name into a resampler that evens out the classes | (inside the pipeline) |
+| 5 | `models.py` | Turn a model name from the config into an unfitted model | (inside the pipeline) |
+| 6 | `pipeline.py` | Chain optional features, scaling, optional resampling, encoding, and a model into one object | (inside experiments) |
+| 7 | `experiments.py` | Cross-validate each setup and write a results table | `make experiments` |
 | | `cli.py` | The `credit-risk` command; runs one stage at a time | |
 
 `make` targets call the `credit-risk` command, which calls the modules. Run `make help`
@@ -66,6 +67,7 @@ for the list of targets.
 | How are features scaled or encoded? | `src/credit_risk/preprocess.py` |
 | Which models are compared, with which settings? | `src/credit_risk/models.py` |
 | How is class imbalance handled? | `src/credit_risk/samplers.py` and the M3 rows in `configs/base.yaml` |
+| Which engineered features exist, and how are they built? | `src/credit_risk/features.py` and the M4 rows in `configs/base.yaml` |
 | How are models scored? | `src/credit_risk/experiments.py` |
 | What were the results? | `reports/tables/experiments.csv` |
 | What does the data look like? | `notebooks/01-eda.ipynb` |
@@ -74,7 +76,7 @@ for the list of targets.
 
 ## What the tests check
 
-`make test` runs the suite (about 120 tests; many are one test run over several inputs).
+`make test` runs the suite (about 150 tests; many are one test run over several inputs).
 The tests check the code, not the model's quality: each one feeds a function an input
 with a known right answer, often a small made-up one, and checks the result.
 
@@ -84,6 +86,7 @@ with a known right answer, often a small made-up one, and checks the result.
 | `test_data.py` | The raw CSV matches its recorded fingerprint (sha256); a changed or missing file stops the pipeline |
 | `test_clean.py` | Undocumented codes are merged, columns renamed, impossible values rejected; real data gives a 22% default rate |
 | `test_split.py` | 80/20 split, same default rate in both, no client in both, same seed gives the same split |
+| `test_features.py` | Each feature matches a hand-worked example; zero or negative bills give a flag, not an error; no missing or infinite values on the real data |
 | `test_preprocess.py` | Amounts are scaled, categories one-hot encoded, unseen categories don't crash |
 | `test_models.py` | Each name builds the right model with the seed applied; a misspelled setting fails instead of being ignored |
 | `test_samplers.py` | Each sampler name builds the right resampler with the seed; a misspelled name fails |
