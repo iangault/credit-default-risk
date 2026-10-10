@@ -176,3 +176,44 @@ there is tested, shared, and run by one command. The path for an idea is: try it
 notebook, then move it into `src/` with a test once it settles.
 
 **How to find what does what:** see "Where to find things" in the README.
+
+#### 6. How the tests work
+
+**What they test:** the code, not the data. Each test feeds a function an input where I
+already know the right answer, then checks the function gives it.
+
+**Why fake data is useful:** to check that a guard catches a problem, I need an input
+that has the problem. Example: `verify_raw` should stop the pipeline if the raw CSV
+changes. I can't test that with the real CSV, because it hasn't changed. So the test
+writes a tiny file (`abd` instead of `abc`) and confirms the guard trips. Like the test
+button on a smoke detector: trigger the alarm on purpose to confirm it works.
+
+- **Fake inputs** check the logic: does it catch typos, bad values, missing files?
+- **Real-data tests** are the sanity check: the committed CSV matches its hash,
+  cleaning gives a 22.12% default rate, the split is 24,000 / 6,000.
+
+**How they run:** test files are not scripts. Running `python tests/test_data.py` only
+defines the functions; nothing calls them. `pytest` (via `make test`) does that:
+1. Finds files in `tests/` named `test_*.py`.
+2. Collects every function named `test_*`. The name prefix is what makes it a test.
+3. Calls each one. It passes if it finishes; it fails if an `assert` is false or an
+   unexpected error is raised.
+
+Useful commands: `pytest -v` (list every test with pass/fail), `pytest tests/test_data.py`
+(one file), `pytest tests/test_data.py::test_sha256_of_known_content` (one test).
+
+**Fixtures (where test arguments come from):** I never call a test, so who fills in its
+arguments? pytest matches each parameter name to a **fixture**, something it builds and
+passes in.
+- `tmp_path` (built into pytest): a fresh empty folder for that test. Tests write fake
+  files there, so the real `data/` folder is never touched and tests can't interfere
+  with each other.
+- `capsys`, `monkeypatch` (built in): capture printed output; temporarily change things
+  like the current folder.
+- Custom fixtures with `@pytest.fixture`, e.g. `cleaned` in `test_split.py` loads and
+  cleans the real data. `scope="module"` builds it once per file instead of once per
+  test.
+
+**What the tests don't tell me:** whether the model is any good. That comes from EDA and
+the experiments table. Tests confirm the plumbing does what it claims, so I can trust
+the results came from the data and settings I intended.
