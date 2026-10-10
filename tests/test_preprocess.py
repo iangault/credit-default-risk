@@ -4,7 +4,15 @@ import pytest
 
 from credit_risk.config import load_config
 from credit_risk.data import TARGET, clean, load_raw
-from credit_risk.preprocess import CATEGORICAL, NUMERIC, ORDINAL, build_preprocessor, build_scaler
+from credit_risk.features import add_features
+from credit_risk.preprocess import (
+    CATEGORICAL,
+    NUMERIC,
+    ORDINAL,
+    build_encoder,
+    build_preprocessor,
+    build_scaler,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,3 +68,20 @@ def test_preprocessor_column_order_matches_m2(features):
     one_hot = ["SEX_2", "EDUCATION_1", "EDUCATION_2", "EDUCATION_3", "EDUCATION_4"]
     one_hot += ["MARRIAGE_1", "MARRIAGE_2", "MARRIAGE_3"]
     assert list(out.columns) == [*NUMERIC, *one_hot, *ORDINAL]
+
+
+def test_scaler_scales_extra_numeric_columns(features):
+    X = add_features(features, ["utilization"])
+    out = build_scaler(["utilization"]).fit_transform(X)
+    assert list(out.columns) == [*NUMERIC, "utilization", *CATEGORICAL, *ORDINAL]
+    assert abs(out["utilization"].mean()) < 1e-9
+
+
+def test_bins_are_one_hot_with_one_bin_per_row(features):
+    X = add_features(features, ["utilization"])
+    scaled = build_scaler(["utilization"]).fit_transform(X)
+    out = build_encoder(["utilization"], ["utilization"]).fit_transform(scaled)
+    bins = [f"utilization_{i}.0" for i in range(10)]
+    assert bins == [c for c in out.columns if c.startswith("utilization_")]
+    assert "utilization" in out.columns  # the raw (scaled) column is kept too
+    assert (out[bins].sum(axis=1) == 1).all()
