@@ -6,7 +6,7 @@ here means it is tested, reruns the same way every time, and can be run from one
 command (`make experiments`, added in M2 Task 7) instead of by running cells.
 
 What it does, for each experiment listed in configs/base.yaml:
-1. Build a preprocessor + model pipeline (pipeline.py).
+1. Build a pipeline: preprocessing, an optional resampler, and a model (pipeline.py).
 2. Run 5-fold cross-validation on the train split: fit on 4 folds, score on the
    5th, repeat 5 times so every row is used for validation once.
 3. Average the 5 scores per metric into one row of the results table.
@@ -69,7 +69,12 @@ def run_experiments(cfg: Config, train: pd.DataFrame | None = None) -> pd.DataFr
         # of arrays with one value per fold, e.g. scores["test_roc_auc"] has 5 values.
         # return_train_score=True also scores each fold's training rows, for the gap.
         scores = cross_validate(pipe, X, y, cv=folds, scoring=SCORERS, return_train_score=True)
-        row = {"experiment": name, "model": experiment.model}
+        # "none" rather than an empty cell, so the CSV reads clearly.
+        row = {
+            "experiment": name,
+            "model": experiment.model,
+            "sampler": experiment.sampler or "none",
+        }
         for metric in METRICS:
             # Mean = typical score; std = how much it varies from fold to fold.
             row[f"{metric}_mean"] = scores[f"test_{metric}"].mean()

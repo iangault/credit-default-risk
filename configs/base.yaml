@@ -19,10 +19,22 @@ costs:
   false_positive: 1.0   # false alarm on a client who would have paid
 
 # Setups compared by `make experiments`, all on the same CV folds.
-# model: a name from credit_risk.models; params: passed to that model.
+# model: a name from credit_risk.models; params: passed to that model;
+# sampler (optional): a name from credit_risk.samplers, applied to training folds only.
 experiments:
+  # M2: each model family at library defaults.
   - {name: dummy, model: dummy}
   - {name: logreg, model: logreg}
   - {name: forest, model: forest}
   - {name: lgbm, model: lgbm}
   - {name: xgboost, model: xgboost}
+  # M3: three ways to handle the 78% / 22% class split, each on logreg and lgbm.
+  # class_weight: balanced counts an error on a defaulter about 3.5 times (78/22)
+  # as much in the training loss. (XGBoost ignores class_weight; it would need
+  # scale_pos_weight, which is why xgboost is not in this group.)
+  - {name: logreg_weighted, model: logreg, params: {class_weight: balanced}}
+  - {name: logreg_undersample, model: logreg, sampler: undersample}
+  - {name: logreg_smotenc, model: logreg, sampler: smotenc}
+  - {name: lgbm_weighted, model: lgbm, params: {class_weight: balanced}}
+  - {name: lgbm_undersample, model: lgbm, sampler: undersample}
+  - {name: lgbm_smotenc, model: lgbm, sampler: smotenc}

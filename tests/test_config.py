@@ -161,7 +161,19 @@ def test_repo_configs_load():
     assert smoke.paths.processed_dir != base.paths.processed_dir
     assert smoke.paths.reports_dir != base.paths.reports_dir
     assert smoke.paths.artifacts_dir != base.paths.artifacts_dir
-    assert [e.name for e in base.experiments] == ["dummy", "logreg", "forest", "lgbm", "xgboost"]
+    assert [e.name for e in base.experiments] == [
+        "dummy",
+        "logreg",
+        "forest",
+        "lgbm",
+        "xgboost",
+        "logreg_weighted",
+        "logreg_undersample",
+        "logreg_smotenc",
+        "lgbm_weighted",
+        "lgbm_undersample",
+        "lgbm_smotenc",
+    ]
     assert smoke.experiments == base.experiments
 
 
