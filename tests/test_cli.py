@@ -89,3 +89,17 @@ def test_split_stage_writes_train_and_test(tmp_path, capsys):
     test = pd.read_parquet(processed / "test.parquet")
     assert len(train) + len(test) == 200
     assert "train" in capsys.readouterr().out
+
+
+def test_experiments_stage_writes_table(tmp_path, capsys):
+    config = make_small_project(tmp_path, n_rows=300)
+    assert main(["--config", str(config), "split"]) == 0
+    assert main(["--config", str(config), "experiments"]) == 0
+    table = pd.read_csv(tmp_path / "reports" / "tables" / "experiments.csv")
+    assert table["experiment"].tolist() == ["dummy", "logreg", "forest", "lgbm", "xgboost"]
+    assert "roc_auc" in capsys.readouterr().out
+
+
+def test_makefile_all_includes_experiments():
+    lines = (ROOT / "Makefile").read_text().splitlines()
+    assert "all: data split experiments" in lines

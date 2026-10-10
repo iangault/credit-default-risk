@@ -19,6 +19,7 @@ from __future__ import annotations
 # Standard libraries
 # Computes a SHA fingerprint of the raw CSV, so function can confirm file hasn't changed.
 import hashlib
+import json
 
 # Handles file paths as objects
 from pathlib import Path
@@ -197,6 +198,20 @@ def split_path(name: str, cfg: Config) -> Path:
     return cfg.paths.processed_dir / f"{name}.parquet"
 
 
+def split_settings_path(cfg: Config) -> Path:
+    return cfg.paths.processed_dir / "split_settings.json"
+
+
+def _split_settings(cfg: Config) -> dict:
+    """The config values that decide which rows land in train and test."""
+    return {
+        "raw_sha256": cfg.raw_sha256,
+        "seed": cfg.seed,
+        "test_size": cfg.test_size,
+        "sample_rows": cfg.sample_rows,
+    }
+
+
 # Takes the train and test DataFrames and the Config; writes them to disk, returns None.
 def save_splits(train: pd.DataFrame, test: pd.DataFrame, cfg: Config) -> None:
     # Create the output folder. parents=True also creates any missing folders above
@@ -206,6 +221,8 @@ def save_splits(train: pd.DataFrame, test: pd.DataFrame, cfg: Config) -> None:
     # row labels, since they carry no information.
     train.to_parquet(split_path("train", cfg), index=False)
     test.to_parquet(split_path("test", cfg), index=False)
+    # Record the settings used, so load_split can refuse a split made with other ones.
+    split_settings_path(cfg).write_text(json.dumps(_split_settings(cfg), indent=2))
 
 
 # `cfg: Config | None = None`: cfg is either a Config object or None, and defaults to
@@ -224,5 +241,14 @@ def load_split(name: str, cfg: Config | None = None) -> pd.DataFrame:
     # If the split stage hasn't been run yet, say how to fix it.
     if not path.is_file():
         raise DataFileError(f"{path} not found. Run `make split` first.")
+    # Refuse a split made with different settings (e.g. seed changed without re-splitting).
+    settings_file = split_settings_path(cfg)
+    saved = json.loads(settings_file.read_text()) if settings_file.is_file() else None
+    if saved != _split_settings(cfg):
+        raise DataFileError(
+            f"The split in {cfg.paths.processed_dir} was made with different settings "
+            f"({saved}) than the current config ({_split_settings(cfg)}). "
+            "Run `make split` again."
+        )
     # Read the Parquet file back into a DataFrame.
     return pd.read_parquet(path)

@@ -1,6 +1,6 @@
 """Command-line entry point: one subcommand per pipeline stage.
 
-Usage: credit-risk [--config PATH] {data,split}
+Usage: credit-risk [--config PATH] {data,split,experiments}
 
 Add a subcommand here as each new stage is built.
 """
@@ -12,6 +12,7 @@ import sys
 
 from credit_risk.config import Config, ConfigError, default_config_path, load_config
 from credit_risk.data import TARGET, DataFileError, clean, load_raw, save_splits, split, verify_raw
+from credit_risk.experiments import run_experiments, save_experiments
 
 
 def _run_data(cfg: Config) -> None:
@@ -28,7 +29,17 @@ def _run_split(cfg: Config) -> None:
     )
 
 
-_STAGES = {"data": _run_data, "split": _run_split}
+def _run_experiments(cfg: Config) -> None:
+    table = run_experiments(cfg)
+    path = save_experiments(table, cfg)
+    summary = table.set_index("experiment")[
+        ["roc_auc_mean", "pr_auc_mean", "recall_mean", "precision_mean"]
+    ]
+    print(summary.round(3).to_string())
+    print(f"Wrote {path}")
+
+
+_STAGES = {"data": _run_data, "split": _run_split, "experiments": _run_experiments}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     stages = parser.add_subparsers(dest="stage", required=True, metavar="STAGE")
     stages.add_parser("data", help="check the raw CSV against its expected sha256")
     stages.add_parser("split", help="clean the raw data and write a stratified train/test split")
+    stages.add_parser("experiments", help="cross-validate each experiment in the config on train")
     return parser
 
 

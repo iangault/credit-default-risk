@@ -8,7 +8,7 @@ from the Makefile, tests, and notebooks.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +34,15 @@ class Costs:
 
 
 @dataclass(frozen=True)
+class Experiment:
+    """One row of the experiments table: a name, a model name, and model settings."""
+
+    name: str
+    model: str
+    params: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class Config:
     paths: Paths
     raw_sha256: str
@@ -42,10 +51,11 @@ class Config:
     cv_folds: int
     costs: Costs
     sample_rows: int | None = None
+    experiments: tuple[Experiment, ...] = ()
 
 
 _TOP_REQUIRED = {"paths", "raw_sha256", "seed", "test_size", "cv_folds", "costs"}
-_TOP_OPTIONAL = {"sample_rows"}
+_TOP_OPTIONAL = {"sample_rows", "experiments"}
 _PATH_KEYS = {"raw", "processed_dir", "reports_dir", "artifacts_dir"}
 _COST_KEYS = {"false_negative", "false_positive"}
 
@@ -91,6 +101,7 @@ def load_config(path: str | Path) -> Config:
             false_positive=_positive("costs.false_positive", costs["false_positive"]),
         ),
         sample_rows=None if sample_rows is None else _int("sample_rows", sample_rows, minimum=1),
+        experiments=_experiments(data["experiments"]) if "experiments" in data else (),
     )
 
 
@@ -146,6 +157,26 @@ def _section(data: dict[str, Any], name: str, keys: set[str]) -> dict[str, Any]:
         raise ConfigError(f"'{name}' must be a mapping with keys {sorted(keys)}")
     _check_keys(name, section, keys)
     return section
+
+
+def _experiments(value: Any) -> tuple[Experiment, ...]:
+    if not isinstance(value, list) or not value:
+        raise ConfigError("'experiments' must be a non-empty list of {name, model, params}")
+    experiments = []
+    for i, item in enumerate(value):
+        where = f"experiments[{i}]"
+        if not isinstance(item, dict):
+            raise ConfigError(f"'{where}' must be a mapping with keys name, model, params")
+        _check_keys(where, item, {"name", "model"}, {"params"})
+        params = item.get("params") or {}
+        if not isinstance(params, dict):
+            raise ConfigError(f"'{where}.params' must be a mapping, got {params!r}")
+        experiments.append(Experiment(str(item["name"]), str(item["model"]), dict(params)))
+    names = [e.name for e in experiments]
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    if duplicates:
+        raise ConfigError(f"Duplicate experiment name(s): {duplicates}")
+    return tuple(experiments)
 
 
 def _is_number(value: Any) -> bool:
