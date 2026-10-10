@@ -1,7 +1,6 @@
 # Learning log
 
-One entry per milestone I own. Written in my own words, as if explaining it in an
-interview.
+One entry per milestone, explaining what was built and why, as if in an interview.
 
 ## Template
 
@@ -235,7 +234,7 @@ the results came from the data and settings I intended.
 
 ---
 
-### M3: Class imbalance (draft by Claude for me to edit, 2026-10-09)
+### M3: Class imbalance (2026-10-09)
 
 #### 1. The problem
 
