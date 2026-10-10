@@ -328,10 +328,10 @@ table came out unchanged to four decimals.
 | lgbm_smotenc | 0.766 | 0.542 | 0.431 | 0.598 |
 
 ROC-AUC varies by about 0.004 to 0.008 between folds (the `_std` columns), so
-differences smaller than that are noise.
+differences smaller than that cannot be told apart from fold-to-fold variation.
 
-- No technique improved ranking. ROC-AUC stayed within 0.01 of the plain model in every
-  case, and PR-AUC did not go up.
+- No technique improved ranking. ROC-AUC stayed within about 0.01 of the plain model
+  (the largest drop was lgbm_smotenc, 0.011 below lgbm), and PR-AUC did not go up.
 - Recall at 0.5 rose a lot (logreg 0.24 to about 0.65; lgbm 0.36 to 0.62 to 0.65 for
   weights and undersampling), and precision fell.
 - Class weights did best overall: same PR-AUC as plain lgbm, much higher recall, and the
@@ -354,7 +354,7 @@ differences smaller than that are noise.
   clients stays about the same, so ROC-AUC stays about the same.
 - What changes is which clients cross 0.5. Raising all scores with a fixed 0.5 cutoff is
   roughly the same as keeping the original scores and lowering the cutoff. Example: four
-  clients scored 0.10, 0.30, 0.45, 0.70 (the last two defaulted) become 0.25, 0.50,
+  clients scored 0.10, 0.30, 0.45, 0.70 (the last two defaulted) become 0.25, 0.55,
   0.65, 0.85. Same order, so the same ROC-AUC, but recall at 0.5 goes from 50% to 100%
   and precision drops because of one new false alarm.
 

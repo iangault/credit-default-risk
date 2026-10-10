@@ -30,8 +30,8 @@ experiments:
   - {name: xgboost, model: xgboost}
   # M3: three ways to handle the 78% / 22% class split, each on logreg and lgbm.
   # class_weight: balanced counts an error on a defaulter about 3.5 times (78/22)
-  # as much in the training loss. (XGBoost ignores class_weight; it would need
-  # scale_pos_weight, which is why xgboost is not in this group.)
+  # as much in the training loss. (XGBoost ignores class_weight and would need
+  # scale_pos_weight instead, one reason xgboost is not in this group.)
   - {name: logreg_weighted, model: logreg, params: {class_weight: balanced}}
   - {name: logreg_undersample, model: logreg, sampler: undersample}
   - {name: logreg_smotenc, model: logreg, sampler: smotenc}
