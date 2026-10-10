@@ -35,14 +35,16 @@ class Costs:
 
 @dataclass(frozen=True)
 class Experiment:
-    """One row of the experiments table: a name, a model name, model settings, and an
-    optional resampler name (from credit_risk.samplers; None means no resampling).
+    """One row of the experiments table: a name, a model name, model settings, an
+    optional resampler name (from credit_risk.samplers; None means no resampling), and
+    engineered feature groups to add (from credit_risk.features; empty means none).
     """
 
     name: str
     model: str
     params: dict[str, Any] = field(default_factory=dict)
     sampler: str | None = None
+    features: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -165,14 +167,14 @@ def _section(data: dict[str, Any], name: str, keys: set[str]) -> dict[str, Any]:
 def _experiments(value: Any) -> tuple[Experiment, ...]:
     if not isinstance(value, list) or not value:
         raise ConfigError(
-            "'experiments' must be a non-empty list of {name, model, params, sampler}"
+            "'experiments' must be a non-empty list of {name, model, params, sampler, features}"
         )
     experiments = []
     for i, item in enumerate(value):
         where = f"experiments[{i}]"
         if not isinstance(item, dict):
             raise ConfigError(f"'{where}' must be a mapping with keys name, model, params")
-        _check_keys(where, item, {"name", "model"}, {"params", "sampler"})
+        _check_keys(where, item, {"name", "model"}, {"params", "sampler", "features"})
         params = item.get("params") or {}
         if not isinstance(params, dict):
             raise ConfigError(f"'{where}.params' must be a mapping, got {params!r}")
@@ -181,8 +183,17 @@ def _experiments(value: Any) -> tuple[Experiment, ...]:
         sampler = item.get("sampler")
         if sampler is not None and not isinstance(sampler, str):
             raise ConfigError(f"'{where}.sampler' must be a sampler name, got {sampler!r}")
+        # A list such as [delinquency, trend]. Group names are checked when the
+        # pipeline is built (features.feature_columns), like model and sampler names.
+        features = item.get("features", [])
+        if not isinstance(features, list) or not all(isinstance(f, str) for f in features):
+            raise ConfigError(
+                f"'{where}.features' must be a list of feature group names, got {features!r}"
+            )
         experiments.append(
-            Experiment(str(item["name"]), str(item["model"]), dict(params), sampler)
+            Experiment(
+                str(item["name"]), str(item["model"]), dict(params), sampler, tuple(features)
+            )
         )
     names = [e.name for e in experiments]
     duplicates = sorted({n for n in names if names.count(n) > 1})

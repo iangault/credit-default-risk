@@ -228,6 +228,22 @@ def test_experiment_sampler_parsed_and_defaults_to_none(project):
     assert cfg.experiments[1].sampler == "smotenc"
 
 
+def test_experiment_features_parsed_and_default_to_empty(project):
+    path = write(
+        project,
+        "exp.yaml",
+        """\
+        extends: base.yaml
+        experiments:
+          - {name: plain, model: logreg}
+          - {name: engineered, model: logreg, features: [delinquency, trend]}
+        """,
+    )
+    cfg = load_config(path)
+    assert cfg.experiments[0].features == ()
+    assert cfg.experiments[1].features == ("delinquency", "trend")
+
+
 def test_experiments_default_to_empty(project):
     assert load_config(project / "configs" / "base.yaml").experiments == ()
 
@@ -240,6 +256,8 @@ def test_experiments_default_to_empty(project):
         ("experiments:\n  - {name: a, model: m, parms: {}}", "parms"),
         ("experiments:\n  - {name: a, model: m, params: 3}", "params"),
         ("experiments:\n  - {name: a, model: m, sampler: 3}", "sampler"),
+        ("experiments:\n  - {name: a, model: m, features: delinquency}", "features"),
+        ("experiments:\n  - {name: a, model: m, features: [1]}", "features"),
         ("experiments:\n  - {name: a, model: m}\n  - {name: a, model: n}", "Duplicate"),
     ],
 )
