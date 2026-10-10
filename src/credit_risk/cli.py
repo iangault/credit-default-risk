@@ -33,7 +33,7 @@ def _run_experiments(cfg: Config) -> None:
     table = run_experiments(cfg)
     path = save_experiments(table, cfg)
     summary = table.set_index("experiment")[
-        ["roc_auc_mean", "pr_auc_mean", "recall_mean", "precision_mean", "fit_time_mean"]
+        ["roc_auc_mean", "pr_auc_mean", "recall_mean", "precision_mean"]
     ]
     print(summary.round(3).to_string())
     print(f"Wrote {path}")

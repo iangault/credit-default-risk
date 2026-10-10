@@ -34,7 +34,9 @@ def test_one_row_per_experiment_with_all_metrics(train, tmp_path):
     for metric in METRICS:
         assert f"{metric}_mean" in table.columns
         assert f"{metric}_std" in table.columns
-    assert {"train_roc_auc_mean", "fit_time_mean"} <= set(table.columns)
+    assert "train_roc_auc_mean" in table.columns
+    # Timings change on every run, so they are left out to keep the CSV diff clean.
+    assert "fit_time_mean" not in table.columns
 
 
 def test_dummy_is_chance_level_and_models_beat_it(train, tmp_path):
@@ -56,8 +58,8 @@ def test_no_undefined_metric_warnings(train, tmp_path):
 
 def test_results_are_repeatable(train, tmp_path):
     cfg = small_cfg(tmp_path, experiments=(Experiment("lr", "logreg"),))
-    first = run_experiments(cfg, train).drop(columns="fit_time_mean")
-    second = run_experiments(cfg, train).drop(columns="fit_time_mean")
+    first = run_experiments(cfg, train)
+    second = run_experiments(cfg, train)
     pd.testing.assert_frame_equal(first, second)
 
 

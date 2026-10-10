@@ -76,7 +76,6 @@ def run_experiments(cfg: Config, train: pd.DataFrame | None = None) -> pd.DataFr
             row[f"{metric}_std"] = scores[f"test_{metric}"].std()
         # Compare with roc_auc_mean: a large gap means the model memorizes train rows.
         row["train_roc_auc_mean"] = scores["train_roc_auc"].mean()
-        row["fit_time_mean"] = scores["fit_time"].mean()  # seconds per fold
         rows.append(row)
     # One row per experiment, in the order listed in the config.
     return pd.DataFrame(rows)
