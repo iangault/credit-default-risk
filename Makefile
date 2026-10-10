@@ -1,64 +1,105 @@
+# Makefile for the credit default risk pipeline
+
 ENV := credit-risk
 CONFIG ?= configs/base.yaml
 RUN := credit-risk --config $(CONFIG)
 
+# Colors for output (set NO_COLOR=1 to turn them off)
+ifeq ($(NO_COLOR),)
+GREEN := \033[0;32m
+YELLOW := \033[1;33m
+CYAN := \033[0;36m
+DIM := \033[2m
+RESET := \033[0m
+endif
+
 .PHONY: help setup lint format test data split experiments all smoke
 .NOTPARALLEL:
 
-# Colors only when printing to a terminal; set NO_COLOR=1 to turn them off.
 help:
-	@if [ -t 1 ] && [ -z "$$NO_COLOR" ]; then \
-	  b='\033[1m'; c='\033[36m'; g='\033[32m'; d='\033[2m'; r='\033[0m'; \
-	else b=''; c=''; g=''; d=''; r=''; fi; \
-	row() { printf "  $${c}%-12s$${r} %-42s $${d}%s$${r}\n" "$$1" "$$2" "$$3"; }; \
-	mod() { printf "  $${g}%-17s$${r} %s\n" "$$1" "$$2"; }; \
-	printf "\n$${b}Pipeline stages$${r} $${d}(run in this order)$${r}\n"; \
-	row "data"       "1. check the raw CSV hash"                "data.py"; \
-	row "split"      "2. clean and split into train/test"       "data.py"; \
-	row "experiments" "3. cross-validate each model on train"   "experiments.py"; \
-	row "all"        "run every stage in order"                 ""; \
-	row "smoke"      "every stage on a small sample (CI)"       "configs/smoke.yaml"; \
-	printf "\n$${b}Development$${r}\n"; \
-	row "setup"      "create/update the conda env and git hooks" ""; \
-	row "lint"       "check style with ruff"                    ""; \
-	row "format"     "auto-format with ruff"                    ""; \
-	row "test"       "run pytest"                               "tests/"; \
-	printf "\n$${b}How the code fits together$${r} $${d}(src/credit_risk/, in order)$${r}\n"; \
-	mod "config.py" "settings from configs/*.yaml, used by every step"; \
-	mod "1 data.py" "load, clean, split"; \
-	mod "2 preprocess.py" "scale amounts, one-hot categories"; \
-	mod "3 models.py" "model name -> unfitted model"; \
-	mod "4 pipeline.py" "preprocessor + model in one object"; \
-	mod "5 experiments.py" "cross-validate each model, results table"; \
-	mod "cli.py" "runs each stage; make targets call it"; \
-	printf "\n$${d}Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml$${r}\n\n"
+	@printf "%b\n" "$(CYAN)Available commands:$(RESET)"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Environment Setup & Testing:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make setup$(RESET)        - Create or update the conda env and install git hooks"
+	@printf "%b\n" "  $(YELLOW)make test$(RESET)         - Run the pytest suite"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Developer - Python formatting:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make lint$(RESET)         - Check style with ruff"
+	@printf "%b\n" "  $(YELLOW)make format$(RESET)       - Auto-format and fix with ruff"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 1 - Data:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make data$(RESET)         - Check the raw CSV against its expected sha256"
+	@printf "%b\n" "  $(YELLOW)make split$(RESET)        - Clean the raw data and write a stratified train/test split"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 2 - Model comparison:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make experiments$(RESET)  - Cross-validate each model in the config on train;"
+	@printf "%b\n" "                      writes reports/tables/experiments.csv"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments)"
+	@printf "%b\n" "  $(YELLOW)make smoke$(RESET)        - Run every step on a 1,000-row sample (what CI runs)"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)How the code fits together (src/credit_risk/, in order):$(RESET)"
+	@printf "%b\n" "  $(GREEN)config.py$(RESET)         - Settings from configs/*.yaml, used by every step"
+	@printf "%b\n" "  $(GREEN)1 data.py$(RESET)         - Load, clean, split"
+	@printf "%b\n" "  $(GREEN)2 preprocess.py$(RESET)   - Scale amounts, one-hot categories"
+	@printf "%b\n" "  $(GREEN)3 models.py$(RESET)       - Model name -> unfitted model"
+	@printf "%b\n" "  $(GREEN)4 pipeline.py$(RESET)     - Preprocessor + model in one object"
+	@printf "%b\n" "  $(GREEN)5 experiments.py$(RESET)  - Cross-validate each model, results table"
+	@printf "%b\n" "  $(GREEN)cli.py$(RESET)            - The credit-risk command; make targets call it"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(DIM)Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml$(RESET)"
+
+# ─── Environment setup ───────────────────────────────────────────────────────
 
 setup:
+	@printf "%b\n" "$(CYAN)Creating or updating the conda env from environment.yml...$(RESET)"
 	conda env create -f environment.yml || conda env update -n $(ENV) -f environment.yml --prune
 	conda run -n $(ENV) pre-commit install
-	@echo "Done. Run: conda activate $(ENV)"
+	@printf "%b\n" "$(GREEN)Setup complete. Run: conda activate $(ENV)$(RESET)"
+
+# ─── Developer checks ────────────────────────────────────────────────────────
 
 lint:
+	@printf "%b\n" "$(CYAN)Checking style with ruff...$(RESET)"
 	ruff check .
 	ruff format --check .
+	@printf "%b\n" "$(GREEN)Lint checks complete.$(RESET)"
 
 format:
+	@printf "%b\n" "$(CYAN)Formatting with ruff...$(RESET)"
 	ruff format .
 	ruff check --fix .
+	@printf "%b\n" "$(GREEN)Formatting complete.$(RESET)"
 
 test:
+	@printf "%b\n" "$(CYAN)Running tests...$(RESET)"
 	pytest
+	@printf "%b\n" "$(GREEN)Tests complete.$(RESET)"
+
+# ─── Step 1: Data ────────────────────────────────────────────────────────────
 
 data:
+	@printf "%b\n" "$(CYAN)Checking the raw CSV...$(RESET)"
 	$(RUN) data
 
 split:
+	@printf "%b\n" "$(CYAN)Cleaning and splitting into train/test...$(RESET)"
 	$(RUN) split
 
-experiments:
-	$(RUN) experiments
+# ─── Step 2: Model comparison ────────────────────────────────────────────────
 
+experiments:
+	@printf "%b\n" "$(CYAN)Cross-validating each experiment on train...$(RESET)"
+	$(RUN) experiments
+	@printf "%b\n" "$(GREEN)Experiments complete.$(RESET)"
+
+# ─── Run everything ──────────────────────────────────────────────────────────
+
+# Steps in order; .NOTPARALLEL keeps them sequential even with make -j.
 all: data split experiments
 
 smoke:
+	@printf "%b\n" "$(CYAN)Smoke run: every step on a small sample...$(RESET)"
 	$(MAKE) all CONFIG=configs/smoke.yaml
+	@printf "%b\n" "$(GREEN)Smoke run complete.$(RESET)"
