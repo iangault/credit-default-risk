@@ -83,6 +83,15 @@ Notebooks are still where exploration happens. They import from the package, so 
 stay short and focused on looking at the data and trying ideas. When an idea settles,
 it moves into `src/` with a test.
 
+## How this project was built
+
+This is an AI-assisted ML project, built with [Claude Code](https://www.anthropic.com/claude-code)
+as a learning exercise and a way to explore what the tool can do. I set the goals and
+made the design and modelling decisions; Claude Code wrote much of the code from
+written plans (`docs/superpowers/plans/`). I explored the data and compared models in
+notebooks, checked the generated code against tests and reruns, and recorded what I
+learned at each milestone in `docs/learning-log.md`.
+
 ## Acknowledgements
 
 This project grew out of a group lab for DSCI 573 (Feature and Model Selection) in the

@@ -38,6 +38,7 @@ def test_numeric_columns_are_scaled(features):
 def test_unseen_category_is_ignored(features):
     fit_rows = features[features["EDUCATION"] != 4]
     pre = build_preprocessor().fit(fit_rows)
-    out = pre.transform(features[features["EDUCATION"] == 4])
+    with pytest.warns(UserWarning, match="unknown categories"):
+        out = pre.transform(features[features["EDUCATION"] == 4])
     education = [c for c in out.columns if c.startswith("EDUCATION_")]
     assert (out[education] == 0).all().all()
