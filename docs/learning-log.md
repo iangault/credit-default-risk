@@ -232,3 +232,43 @@ passes in.
 **What the tests don't tell me:** whether the model is any good. That comes from EDA and
 the experiments table. Tests confirm the plumbing does what it claims, so I can trust
 the results came from the data and settings I intended.
+
+---
+
+### M3: Class imbalance (draft by Claude for me to edit, started 2026-10-09)
+
+#### 1. How the pipeline is built
+
+Each line in the `experiments` list of `configs/base.yaml` is one recipe. An optional
+`sampler:` asks for the training rows to be resampled first:
+
+```yaml
+- {name: lgbm,         model: lgbm}                     # no resampling
+- {name: lgbm_smotenc, model: lgbm, sampler: smotenc}   # resample, then train
+```
+
+`build_pipeline` in `src/credit_risk/pipeline.py` turns one line into a chain of steps:
+
+```python
+steps = [("scale", build_scaler())]            # a list of (label, step) pairs
+if experiment.sampler is not None:             # only if the line named a sampler
+    steps.append(("sample", get_sampler(experiment.sampler, seed)))
+steps += [("encode", build_encoder()), ("model", model)]
+return Pipeline(steps)                         # runs the steps in list order
+```
+
+| Config line | Steps |
+|---|---|
+| no `sampler:` | scale -> encode -> model |
+| `sampler: smotenc` | scale -> **sample** -> encode -> model |
+
+- **Python pieces:** `[...]` is a list (ordered, can grow); `("scale", ...)` is a tuple
+  (a fixed pair: a label and the step object); `None` means "no value", which is what
+  `sampler` holds when the config line leaves it out; `.append` adds one item to the
+  end of a list, and `+=` adds several.
+- **Why one function for every experiment:** all experiments share the same chain, and
+  the `if` adds the resample step only where asked. Differences in the results table
+  then come from the technique, not from different code paths.
+- **Why imblearn's `Pipeline`:** it runs the resample step only while training. When a
+  fold is scored or `predict_proba` is called, the step is skipped, so the model is
+  judged on real rows with the real 22% default rate.

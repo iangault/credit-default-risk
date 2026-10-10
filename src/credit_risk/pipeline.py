@@ -47,10 +47,14 @@ def build_pipeline(experiment: Experiment, seed: int) -> Pipeline:
     """
     # Look up the model by name (raises ValueError on a typo like "lgmb").
     model = get_model(experiment.model, experiment.params, seed)
+    # `steps` is a list of (label, step) pairs, run in list order. Start with scaling.
     steps = [("scale", build_scaler())]
+    # experiment.sampler is the `sampler:` value from the config line, or None when the
+    # line has none. Only experiments that name a sampler get a resample step.
     if experiment.sampler is not None:
         # Raises ValueError on a typo like "smote", before any fitting starts.
         steps.append(("sample", get_sampler(experiment.sampler, seed)))
+    # Every experiment ends the same way: one-hot encode, then the model.
     steps += [("encode", build_encoder()), ("model", model)]
     # Steps are named by hand (make_pipeline would name them after their classes) so
     # other code can ask for pipe.named_steps["model"] whatever the model is.
