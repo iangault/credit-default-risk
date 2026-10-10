@@ -125,3 +125,54 @@ Scratch notebook results (default settings, 5-fold CV ROC-AUC, validation / trai
 - Example from M2: the model comparison was first run in `notebooks/scratch.ipynb`,
   then moved to `models.py` (`get_model`) with tests in `tests/test_models.py`. It
   becomes `make experiments` in Task 7.
+
+#### 5. Why the project is built as a package (a lab framing)
+
+**The short version:** the notebook is the bench notebook, where I try things. The
+package (`src/credit_risk/`) is the validated protocol: the one version everyone
+follows, with controls that confirm it still works.
+
+| Software practice | Lab equivalent |
+|---|---|
+| Notebook (`notebooks/`) | Bench notebook: trying things, looking at results |
+| Package (`src/credit_risk/`) | Validated SOP: the one version of each step everyone uses |
+| Config (`configs/base.yaml`) | Protocol parameter sheet, kept separate from the steps |
+| Raw data sha256 check | Checking the sample ID / lot number before starting |
+| Fixed seed | A fixed plate layout, so reruns are comparable |
+| Tests (`tests/`) | Positive and negative controls: confirm the assay works before trusting results |
+| Dummy model | Negative control: the result with no real signal |
+| `make all` | Running the full protocol start to finish |
+| CI (GitHub Actions) | QC run every time the protocol is edited |
+| git history | Dated notebook entries showing what changed and when |
+
+**Why a package instead of relative paths:**
+- A relative import (`sys.path.append("../src")`) depends on which folder the code runs
+  from: it works in one place and breaks in another. An installed package imports the
+  same way from notebooks, tests, the terminal, and CI.
+- There is one copy of each function. The notebook, the tests, and `make experiments`
+  call the same `get_model`, so a fix lands everywhere at once. Copy-pasted code
+  drifts, like photocopies of a protocol that each get hand-edited.
+
+**The principles behind the layout, and what each one buys:**
+1. **One job per module.** Cleaning is in `data.py`, scaling in `preprocess.py`, models in
+   `models.py`. I know where to look, and changing one step does not touch the others.
+2. **One source of truth.** Each step is written once and imported everywhere else.
+3. **Functions take inputs and return outputs, with no hidden state.**
+   `run_experiments(cfg, train)` depends only on what is passed in. Same input, same
+   output, so it can be tested, and notebook cell order stops mattering.
+4. **Settings in config, not in code.** Changing CV folds or adding a model is a config
+   edit, and the config is a record of what was run.
+5. **Fail early, with a clear message.** A typo in a model name fails before 30 seconds
+   of training; a changed raw file stops at step 1 instead of producing quietly
+   different results.
+6. **Test first.** Write the expected result before writing the code, like defining
+   what a positive result looks like before running the assay. It stops me from
+   deciding after the fact that whatever came out was correct.
+
+**Where notebooks still fit:** exploration, plots, and trying ideas. They import from
+the package, so they stay short. My scratch notebook already used functions
+(`run_cv`, `compare`); the difference with `src/` is not tidiness but that the code
+there is tested, shared, and run by one command. The path for an idea is: try it in a
+notebook, then move it into `src/` with a test once it settles.
+
+**How to find what does what:** see "Where to find things" in the README.

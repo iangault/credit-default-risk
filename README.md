@@ -56,6 +56,33 @@ The modules in `src/credit_risk/`, in the order the pipeline uses them:
 `make` targets call the `credit-risk` command, which calls the modules. Run `make help`
 for the list of targets.
 
+## Where to find things
+
+| Question | Where to look |
+|---|---|
+| What settings were used (seed, CV folds, which models)? | `configs/base.yaml` |
+| How is the raw data cleaned? | `clean()` in `src/credit_risk/data.py` |
+| How are features scaled or encoded? | `src/credit_risk/preprocess.py` |
+| Which models are compared, with which settings? | `src/credit_risk/models.py` |
+| How are models scored? | `src/credit_risk/experiments.py` |
+| What were the results? | `reports/tables/experiments.csv` |
+| What does the data look like? | `notebooks/01-eda.ipynb` |
+| What is a given function supposed to do? | Its test in `tests/test_<module>.py` |
+| Why was a decision made? | `docs/learning-log.md` and the design spec |
+
+## Why it is built this way
+
+The analysis code is an installable Python package (`src/credit_risk/`) rather than a
+set of notebooks. Notebooks, tests, and the `credit-risk` command all import the same
+functions, so there is one copy of each step and a fix to it applies everywhere. Each
+module does one job, settings live in `configs/` rather than in the code, and each
+step is covered by tests. The result is that `make all` reruns the analysis from the
+raw file and, with the same data, code, and seed, gives the same numbers.
+
+Notebooks are still where exploration happens. They import from the package, so they
+stay short and focused on looking at the data and trying ideas. When an idea settles,
+it moves into `src/` with a test.
+
 ## Acknowledgements
 
 This project grew out of a group lab for DSCI 573 (Feature and Model Selection) in the
