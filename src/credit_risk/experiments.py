@@ -6,7 +6,8 @@ here means it is tested, reruns the same way every time, and can be run from one
 command (`make experiments`, added in M2 Task 7) instead of by running cells.
 
 What it does, for each experiment listed in configs/base.yaml:
-1. Build a pipeline: preprocessing, an optional resampler, and a model (pipeline.py).
+1. Build a pipeline: optional engineered features, preprocessing, an optional
+   resampler, and a model (pipeline.py).
 2. Run 5-fold cross-validation on the train split: fit on 4 folds, score on the
    5th, repeat 5 times so every row is used for validation once.
 3. Average the 5 scores per metric into one row of the results table.
@@ -74,6 +75,8 @@ def run_experiments(cfg: Config, train: pd.DataFrame | None = None) -> pd.DataFr
             "experiment": name,
             "model": experiment.model,
             "sampler": experiment.sampler or "none",
+            # Groups joined with "+", e.g. "delinquency+trend".
+            "features": "+".join(experiment.features) or "none",
         }
         for metric in METRICS:
             # Mean = typical score; std = how much it varies from fold to fold.

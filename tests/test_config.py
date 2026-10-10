@@ -173,6 +173,16 @@ def test_repo_configs_load():
         "lgbm_weighted",
         "lgbm_undersample",
         "lgbm_smotenc",
+        "logreg_weighted_delinquency",
+        "logreg_weighted_payment",
+        "logreg_weighted_utilization",
+        "logreg_weighted_trend",
+        "logreg_weighted_allfeatures",
+        "lgbm_weighted_delinquency",
+        "lgbm_weighted_payment",
+        "lgbm_weighted_utilization",
+        "lgbm_weighted_trend",
+        "lgbm_weighted_allfeatures",
     ]
     assert smoke.experiments == base.experiments
 
