@@ -4,7 +4,7 @@ import pytest
 
 from credit_risk.config import load_config
 from credit_risk.data import TARGET, clean, load_raw
-from credit_risk.preprocess import build_preprocessor
+from credit_risk.preprocess import CATEGORICAL, NUMERIC, ORDINAL, build_preprocessor, build_scaler
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,3 +42,21 @@ def test_unseen_category_is_ignored(features):
         out = pre.transform(features[features["EDUCATION"] == 4])
     education = [c for c in out.columns if c.startswith("EDUCATION_")]
     assert (out[education] == 0).all().all()
+
+
+def test_scaler_keeps_codes_as_single_columns(features):
+    # The middle state SMOTENC needs: amounts scaled, codes still one column each.
+    out = build_scaler().fit_transform(features)
+    assert list(out.columns) == [*NUMERIC, *CATEGORICAL, *ORDINAL]
+    codes = CATEGORICAL + ORDINAL
+    assert out[codes].values.tolist() == features[codes].values.tolist()
+    assert abs(out["LIMIT_BAL"].mean()) < 1e-9
+
+
+def test_preprocessor_column_order_matches_m2(features):
+    # Pins the M2 layout so the split into two steps cannot reorder columns
+    # (tree models can shift slightly when column order changes).
+    out = build_preprocessor().fit_transform(features)
+    one_hot = ["SEX_2", "EDUCATION_1", "EDUCATION_2", "EDUCATION_3", "EDUCATION_4"]
+    one_hot += ["MARRIAGE_1", "MARRIAGE_2", "MARRIAGE_3"]
+    assert list(out.columns) == [*NUMERIC, *one_hot, *ORDINAL]

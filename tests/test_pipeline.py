@@ -26,7 +26,7 @@ def test_pipeline_fits_and_predicts_probabilities(sample, model):
 
 def test_pipeline_steps():
     pipe = build_pipeline(Experiment(name="lr", model="logreg"), seed=0)
-    assert list(pipe.named_steps) == ["columntransformer", "logisticregression"]
+    assert list(pipe.named_steps) == ["pipeline", "logisticregression"]
 
 
 def test_unknown_model_fails_when_building():
