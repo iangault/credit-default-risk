@@ -4,6 +4,7 @@ import pytest
 
 from credit_risk.config import Experiment, load_config
 from credit_risk.data import TARGET, clean, load_raw
+from credit_risk.features import GROUP_NAMES
 from credit_risk.models import MODEL_NAMES
 from credit_risk.pipeline import build_pipeline
 from credit_risk.preprocess import CATEGORICAL, ORDINAL
@@ -74,3 +75,41 @@ def test_unknown_sampler_fails_when_building():
 def test_unknown_model_fails_when_building():
     with pytest.raises(ValueError, match="lgbm"):
         build_pipeline(Experiment(name="typo", model="lgmb"), seed=0)
+
+
+def test_pipeline_steps_with_features():
+    exp = Experiment(name="lr", model="logreg", features=("delinquency",))
+    assert list(build_pipeline(exp, seed=0).named_steps) == [
+        "features",
+        "scale",
+        "encode",
+        "model",
+    ]
+
+
+@pytest.mark.parametrize("group", GROUP_NAMES)
+def test_each_feature_group_fits_and_predicts(sample, group):
+    X, y = sample
+    exp = Experiment(name="lr", model="logreg", features=(group,))
+    proba = build_pipeline(exp, seed=0).fit(X, y).predict_proba(X)[:, 1]
+    assert ((proba >= 0) & (proba <= 1)).all()
+
+
+def test_model_sees_the_engineered_columns(sample):
+    X, y = sample
+    exp = Experiment(name="lr", model="logreg", features=("utilization",))
+    pipe = build_pipeline(exp, seed=0).fit(X, y)
+    seen = list(pipe.named_steps["model"].feature_names_in_)
+    assert "utilization" in seen
+    assert "utilization_0.0" in seen
+
+
+def test_unknown_feature_group_fails_when_building():
+    with pytest.raises(ValueError, match="delinquency"):
+        build_pipeline(Experiment(name="t", model="logreg", features=("delinquncy",)), seed=0)
+
+
+def test_smotenc_with_features_is_refused():
+    exp = Experiment(name="t", model="logreg", sampler="smotenc", features=("delinquency",))
+    with pytest.raises(ValueError, match="smotenc"):
+        build_pipeline(exp, seed=0)
