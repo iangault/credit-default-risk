@@ -38,6 +38,8 @@ def test_one_row_per_experiment_with_all_metrics(train, tmp_path):
 
 
 def test_dummy_is_chance_level_and_models_beat_it(train, tmp_path):
+    # The dummy is the negative control: no real signal, so AUC 0.5 is known in
+    # advance. 0.6 is a loose floor that only a broken model should miss.
     table = run_experiments(small_cfg(tmp_path), train).set_index("experiment")
     assert table.loc["dummy", "roc_auc_mean"] == pytest.approx(0.5)
     assert table.loc["dummy", "precision_mean"] == 0

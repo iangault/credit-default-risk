@@ -25,6 +25,8 @@ def cfg_with(tmp_path, **changes):
     return replace(BASE, paths=paths, **changes)
 
 
+# Any test with a `cleaned` parameter gets this passed in by pytest. scope="module"
+# loads the CSV once for this file instead of once per test.
 @pytest.fixture(scope="module")
 def cleaned():
     return clean(load_raw(BASE))

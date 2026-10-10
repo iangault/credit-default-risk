@@ -70,6 +70,27 @@ for the list of targets.
 | What is a given function supposed to do? | Its test in `tests/test_<module>.py` |
 | Why was a decision made? | `docs/learning-log.md` and the design spec |
 
+## What the tests check
+
+`make test` runs the suite (about 110 tests; many are one test run over several inputs).
+The tests check the code, not the model's quality: each one feeds a function an input
+with a known right answer, often a small made-up one, and checks the result.
+
+| File | What it checks |
+|---|---|
+| `test_config.py` | Settings load correctly; typos, bad values, and broken YAML fail with a clear message |
+| `test_data.py` | The raw CSV matches its recorded fingerprint (sha256); a changed or missing file stops the pipeline |
+| `test_clean.py` | Undocumented codes are merged, columns renamed, impossible values rejected; real data gives a 22% default rate |
+| `test_split.py` | 80/20 split, same default rate in both, no client in both, same seed gives the same split |
+| `test_preprocess.py` | Amounts are scaled, categories one-hot encoded, unseen categories don't crash |
+| `test_models.py` | Each name builds the right model with the seed applied; a misspelled setting fails instead of being ignored |
+| `test_pipeline.py` | Every model fits and returns probabilities between 0 and 1 |
+| `test_experiments.py` | One results row per model; the dummy scores chance level and real models beat it; reruns match |
+| `test_cli.py` | Each `make` stage runs end to end on a small sample and prints readable errors |
+
+Why the tests use made-up inputs, and how pytest runs them, is explained in
+`docs/learning-log.md` (M2, "How the tests work").
+
 ## Why it is built this way
 
 The analysis code is an installable Python package (`src/credit_risk/`) rather than a

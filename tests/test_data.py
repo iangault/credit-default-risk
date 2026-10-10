@@ -6,6 +6,8 @@ from credit_risk.config import Config, Costs, Paths, load_config
 from credit_risk.data import DataFileError, sha256_of, verify_raw
 
 ROOT = Path(__file__).resolve().parents[1]
+# The SHA-256 standard's published answer for the input "abc". It comes from outside
+# this code, so a bug in sha256_of makes the test fail instead of agreeing with itself.
 ABC_SHA256 = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
 
 
@@ -39,6 +41,8 @@ def test_verify_raw_passes_on_matching_hash(tmp_path):
 
 
 def test_verify_raw_raises_when_file_changed(tmp_path):
+    # A one-letter change stands in for an edited CSV, so the guard can be tripped on
+    # purpose without touching the real data. tmp_path is a fresh folder from pytest.
     f = tmp_path / "raw.csv"
     f.write_bytes(b"abd")
     with pytest.raises(DataFileError, match="changed"):
@@ -51,6 +55,8 @@ def test_verify_raw_raises_when_file_missing(tmp_path):
 
 
 def test_committed_raw_csv_matches_base_config():
+    # raw_sha256 was recorded once from the downloaded CSV. This checks "same file as
+    # before", not that the data is correct.
     verify_raw(load_config(ROOT / "configs" / "base.yaml"))
 
 

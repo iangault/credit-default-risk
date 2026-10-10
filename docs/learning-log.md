@@ -192,6 +192,21 @@ button on a smoke detector: trigger the alarm on purpose to confirm it works.
 - **Real-data tests** are the sanity check: the committed CSV matches its hash,
   cleaning gives a 22.12% default rate, the split is 24,000 / 6,000.
 
+**Where the expected answer comes from:** it has to come from somewhere other than the
+code being tested. If I ran my own function, copied its output, and asserted the output
+equals that, the test would pass whether the code was right or wrong.
+- Good sources: a published standard, a hand calculation, or a case small enough to
+  check by eye (`EDUCATION=[0, 5, 6, 1]` should become `[4, 4, 4, 1]`).
+- Example: `ABC_SHA256` in `test_data.py` is the answer published in the SHA-256
+  standard for the input "abc". Every correct implementation gives it, so a bug in
+  `sha256_of` would make the test fail.
+
+**Two jobs that look alike:**
+- `ABC_SHA256` checks that **the hashing code is correct**. Outside reference.
+- `raw_sha256` in `base.yaml` checks that **the data hasn't changed**. It was recorded
+  once by hashing the downloaded CSV and is compared on every run. It proves nothing
+  about correctness, only "same file as before", which is all it needs to do.
+
 **How they run:** test files are not scripts. Running `python tests/test_data.py` only
 defines the functions; nothing calls them. `pytest` (via `make test`) does that:
 1. Finds files in `tests/` named `test_*.py`.

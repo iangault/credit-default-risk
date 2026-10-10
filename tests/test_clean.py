@@ -39,6 +39,8 @@ def test_clean_renames_pay_0_and_target():
 
 
 def test_clean_merges_undocumented_education_codes():
+    # Expected values follow the documented cleaning rule: 0, 5 and 6 are undocumented and
+    # merge into 4 ("other"). Small enough to check by eye.
     out = clean(raw_frame(EDUCATION=[0, 5, 6, 1]))
     assert out["EDUCATION"].tolist() == [4, 4, 4, 1]
 
@@ -77,6 +79,8 @@ def test_clean_rejects_missing_column():
 
 
 def test_clean_on_real_data():
+    # The tests above check the logic on fake rows; this is the sanity check on the
+    # real 30,000 rows.
     out = clean(load_raw(load_config(ROOT / "configs" / "base.yaml")))
     assert out.shape == (30000, 25)
     assert set(out["EDUCATION"]) == {1, 2, 3, 4}
