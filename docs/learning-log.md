@@ -235,9 +235,33 @@ the results came from the data and settings I intended.
 
 ---
 
-### M3: Class imbalance (draft by Claude for me to edit, started 2026-10-09)
+### M3: Class imbalance (draft by Claude for me to edit, 2026-10-09)
 
-#### 1. How the pipeline is built
+#### 1. The problem
+
+About 22% of clients in train defaulted. At the default 0.5 cutoff, the M2 LightGBM
+catches 36% of them (recall 0.361), even though it ranks clients well (ROC-AUC 0.776).
+So the weak point is the decision, not the ranking. M3 tests three common fixes, each on
+its own, on logistic regression and LightGBM.
+
+#### 2. The three techniques
+
+- **Class weights** (`params: {class_weight: balanced}`): every row is kept, but an
+  error on a defaulter counts about 3.5 times (78/22) as much in the training loss. A
+  model setting, not a resampler. XGBoost ignores `class_weight` (it uses
+  `scale_pos_weight`), which is one reason it was left out of M3.
+- **Random undersampling** (`sampler: undersample`): randomly drops non-defaulters from
+  the training rows until the classes are equal. Only real rows, but a training fold
+  shrinks from about 19,200 rows to about 8,500.
+- **SMOTENC** (`sampler: smotenc`): adds synthetic defaulters until the classes are
+  equal. Each new row sits between a real defaulter and one of its 5 nearest defaulter
+  neighbours for the numeric columns, and takes the most common neighbour value for the
+  categorical ones.
+
+A **resampler** changes which rows the model trains on. It only touches training
+folds; validation folds keep their real 22% default rate.
+
+#### 3. How the pipeline is built
 
 Each line in the `experiments` list of `configs/base.yaml` is one recipe. An optional
 `sampler:` asks for the training rows to be resampled first:
@@ -272,3 +296,72 @@ return Pipeline(steps)                         # runs the steps in list order
 - **Why imblearn's `Pipeline`:** it runs the resample step only while training. When a
   fold is scored or `predict_proba` is called, the step is skipped, so the model is
   judged on real rows with the real 22% default rate.
+- **Resampling inside the folds, not before:** resampling all of train before
+  cross-validation would let synthetic rows built partly from validation rows into
+  training, and would change the validation class mix, so the scores would no longer
+  describe real clients.
+
+#### 4. Why SMOTENC and a two-step preprocessor
+
+Plain SMOTE interpolates every column. After one-hot encoding that gives values like
+`EDUCATION_2 = 0.4`, and on the PAY columns values like `PAY_1 = 1.4`, neither of which
+can occur. SMOTENC handles listed columns as categories instead, so the PAY columns are
+listed too (only for resampling; the model still sees them as numbers).
+
+SMOTENC needs two things at once: amounts already scaled (it uses distances, and an
+unscaled `LIMIT_BAL` would outweigh `AGE`), and categories not yet one-hot encoded. So
+the M2 preprocessor was split into `build_scaler()` and `build_encoder()`, with the
+resampler between them. A test pins the column order, and the M2 rows in the results
+table came out unchanged to four decimals.
+
+#### 5. Results (5-fold CV on train)
+
+| experiment | ROC-AUC | PR-AUC | recall | precision |
+|---|---|---|---|---|
+| logreg | 0.722 | 0.503 | 0.236 | 0.720 |
+| logreg_weighted | 0.723 | 0.500 | 0.647 | 0.377 |
+| logreg_undersample | 0.723 | 0.499 | 0.649 | 0.374 |
+| logreg_smotenc | 0.722 | 0.496 | 0.655 | 0.355 |
+| lgbm | 0.776 | 0.555 | 0.361 | 0.668 |
+| lgbm_weighted | 0.775 | 0.555 | 0.617 | 0.465 |
+| lgbm_undersample | 0.773 | 0.538 | 0.653 | 0.436 |
+| lgbm_smotenc | 0.766 | 0.542 | 0.431 | 0.598 |
+
+ROC-AUC varies by about 0.004 to 0.008 between folds (the `_std` columns), so
+differences smaller than that are noise.
+
+- No technique improved ranking. ROC-AUC stayed within 0.01 of the plain model in every
+  case, and PR-AUC did not go up.
+- Recall at 0.5 rose a lot (logreg 0.24 to about 0.65; lgbm 0.36 to 0.62 to 0.65 for
+  weights and undersampling), and precision fell.
+- Class weights did best overall: same PR-AUC as plain lgbm, much higher recall, and the
+  simplest and cheapest to run.
+- Undersampling cost lgbm some PR-AUC (0.538), likely because it trains on fewer than
+  half the rows.
+- SMOTENC was the weakest on lgbm: lowest ROC-AUC (0.766) and a much smaller recall
+  gain (0.431). A possible reason, not checked: trees can learn the synthetic rows as
+  their own region, so real defaulters' scores rise less. On logreg it matched the
+  other two.
+
+#### 6. Why ROC-AUC changes little
+
+- ROC-AUC measures ranking: the chance that a random defaulter gets a higher score than
+  a random non-defaulter. It does not use the 0.5 cutoff.
+- The ROC curve plots the true positive rate (computed among defaulters only) against
+  the false positive rate (computed among non-defaulters only), so the class ratio the
+  model trained on does not enter it.
+- Class weights and resampling mostly push everyone's score up together. The order of
+  clients stays about the same, so ROC-AUC stays about the same.
+- What changes is which clients cross 0.5. Raising all scores with a fixed 0.5 cutoff is
+  roughly the same as keeping the original scores and lowering the cutoff. Example: four
+  clients scored 0.10, 0.30, 0.45, 0.70 (the last two defaulted) become 0.25, 0.50,
+  0.65, 0.85. Same order, so the same ROC-AUC, but recall at 0.5 goes from 50% to 100%
+  and precision drops because of one new false alarm.
+
+#### 7. What this means for later milestones
+
+- The cutoff is the real lever. M5 picks it from the cost of each error type instead of
+  using 0.5, which can reach a similar recall/precision trade-off without resampling.
+- All three techniques push predicted probabilities above the true default rate, so
+  they no longer read as real probabilities. M5's calibration step has to account for
+  that if a weighted or resampled model is used.
