@@ -430,12 +430,30 @@ joined into one label:
 - With no features, the join gives an empty string `""`, which Python treats as false,
   so `or "none"` writes `none` instead of an empty cell (the same style as `sampler`).
 
-Where it appears in the pipeline, as steps:
+**How `build_pipeline` assembles the steps** (`src/credit_risk/pipeline.py`; the Python
+pieces are explained in M3, section 3). M4 adds one more `if` and passes `extra` along:
 
-| Config line | Steps |
-|---|---|
-| no `features:` | scale -> encode -> model |
-| `features: [delinquency]` | **features** -> scale -> encode -> model |
+```python
+extra = feature_columns(experiment.features)   # e.g. ["months_late", "max_delay"], or []
+steps = []
+if extra:                                      # true only if the list is not empty
+    steps.append(("features", build_feature_step(experiment.features)))
+steps.append(("scale", build_scaler(extra)))   # also scale the new columns
+if experiment.sampler is not None:
+    steps.append(("sample", get_sampler(experiment.sampler, seed)))
+steps += [("encode", build_encoder(extra, binned)), ("model", model)]  # also keep them
+return Pipeline(steps)
+```
+
+| Config line | `extra` | `if extra:` | Final steps |
+|---|---|---|---|
+| `logreg_weighted` (no `features:`) | `[]` | skipped | scale -> encode -> model (same as M3) |
+| `logreg_weighted_delinquency` | `["months_late", "max_delay"]` | adds the step | **features** -> scale -> encode -> model |
+
+The `if` lines decide which stations are on the line for this order. Passing `extra` to
+the scaler and encoder is the note to the later stations: "two new parts are coming;
+keep them." Without it, the encoder would drop `months_late` with no error, and the
+model would never see it.
 
 #### 4. Why logistic regression cannot follow a U-shape
 
