@@ -35,11 +35,14 @@ class Costs:
 
 @dataclass(frozen=True)
 class Experiment:
-    """One row of the experiments table: a name, a model name, and model settings."""
+    """One row of the experiments table: a name, a model name, model settings, and an
+    optional resampler name (from credit_risk.samplers; None means no resampling).
+    """
 
     name: str
     model: str
     params: dict[str, Any] = field(default_factory=dict)
+    sampler: str | None = None
 
 
 @dataclass(frozen=True)
@@ -161,17 +164,26 @@ def _section(data: dict[str, Any], name: str, keys: set[str]) -> dict[str, Any]:
 
 def _experiments(value: Any) -> tuple[Experiment, ...]:
     if not isinstance(value, list) or not value:
-        raise ConfigError("'experiments' must be a non-empty list of {name, model, params}")
+        raise ConfigError(
+            "'experiments' must be a non-empty list of {name, model, params, sampler}"
+        )
     experiments = []
     for i, item in enumerate(value):
         where = f"experiments[{i}]"
         if not isinstance(item, dict):
             raise ConfigError(f"'{where}' must be a mapping with keys name, model, params")
-        _check_keys(where, item, {"name", "model"}, {"params"})
+        _check_keys(where, item, {"name", "model"}, {"params", "sampler"})
         params = item.get("params") or {}
         if not isinstance(params, dict):
             raise ConfigError(f"'{where}.params' must be a mapping, got {params!r}")
-        experiments.append(Experiment(str(item["name"]), str(item["model"]), dict(params)))
+        # Only the type is checked here. Whether the name exists is checked when the
+        # pipeline is built (samplers.get_sampler), the same way model names are.
+        sampler = item.get("sampler")
+        if sampler is not None and not isinstance(sampler, str):
+            raise ConfigError(f"'{where}.sampler' must be a sampler name, got {sampler!r}")
+        experiments.append(
+            Experiment(str(item["name"]), str(item["model"]), dict(params), sampler)
+        )
     names = [e.name for e in experiments]
     duplicates = sorted({n for n in names if names.count(n) > 1})
     if duplicates:

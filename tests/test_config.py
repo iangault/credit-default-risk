@@ -161,7 +161,19 @@ def test_repo_configs_load():
     assert smoke.paths.processed_dir != base.paths.processed_dir
     assert smoke.paths.reports_dir != base.paths.reports_dir
     assert smoke.paths.artifacts_dir != base.paths.artifacts_dir
-    assert [e.name for e in base.experiments] == ["dummy", "logreg", "forest", "lgbm", "xgboost"]
+    assert [e.name for e in base.experiments] == [
+        "dummy",
+        "logreg",
+        "forest",
+        "lgbm",
+        "xgboost",
+        "logreg_weighted",
+        "logreg_undersample",
+        "logreg_smotenc",
+        "lgbm_weighted",
+        "lgbm_undersample",
+        "lgbm_smotenc",
+    ]
     assert smoke.experiments == base.experiments
 
 
@@ -200,6 +212,22 @@ def test_experiments_parsed_in_order(project):
     assert cfg.experiments[1].params == {"C": 0.1}
 
 
+def test_experiment_sampler_parsed_and_defaults_to_none(project):
+    path = write(
+        project,
+        "exp.yaml",
+        """\
+        extends: base.yaml
+        experiments:
+          - {name: plain, model: logreg}
+          - {name: resampled, model: logreg, sampler: smotenc}
+        """,
+    )
+    cfg = load_config(path)
+    assert cfg.experiments[0].sampler is None
+    assert cfg.experiments[1].sampler == "smotenc"
+
+
 def test_experiments_default_to_empty(project):
     assert load_config(project / "configs" / "base.yaml").experiments == ()
 
@@ -211,6 +239,7 @@ def test_experiments_default_to_empty(project):
         ("experiments:\n  - {name: a}", "model"),
         ("experiments:\n  - {name: a, model: m, parms: {}}", "parms"),
         ("experiments:\n  - {name: a, model: m, params: 3}", "params"),
+        ("experiments:\n  - {name: a, model: m, sampler: 3}", "sampler"),
         ("experiments:\n  - {name: a, model: m}\n  - {name: a, model: n}", "Duplicate"),
     ],
 )

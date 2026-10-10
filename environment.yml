@@ -9,6 +9,7 @@ dependencies:
   - pandas>=2.2
   - pyyaml>=6.0
   - scikit-learn>=1.5
+  - imbalanced-learn>=0.12   # resamplers (SMOTE, SMOTENC, undersampling) and a Pipeline that runs them only during fit
   - pyarrow>=15
   - lightgbm>=4
   - xgboost>=2

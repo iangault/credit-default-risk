@@ -96,7 +96,7 @@ def test_experiments_stage_writes_table(tmp_path, capsys):
     assert main(["--config", str(config), "split"]) == 0
     assert main(["--config", str(config), "experiments"]) == 0
     table = pd.read_csv(tmp_path / "reports" / "tables" / "experiments.csv")
-    assert table["experiment"].tolist() == ["dummy", "logreg", "forest", "lgbm", "xgboost"]
+    assert table["experiment"].tolist() == [e.name for e in load_config(config).experiments]
     assert "roc_auc" in capsys.readouterr().out
 
 
