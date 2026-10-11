@@ -12,8 +12,10 @@ seed: 573
 test_size: 0.2
 cv_folds: 5
 
-# Cost of each error type, used to choose the decision threshold.
-# Starting values only; to be chosen and justified with the decision threshold work.
+# Cost of each error type, used to choose the decision threshold (`make train`).
+# Chosen 2026-10-11: a missed defaulter costs 5 times a false alarm, the ratio in the
+# documented cost matrix of the Statlog (German Credit) dataset, a common reference for
+# credit scoring. make decide also reports 3:1 and 10:1 to show how the choice moves.
 costs:
   false_negative: 5.0   # missed defaulter
   false_positive: 1.0   # false alarm on a client who would have paid
@@ -62,7 +64,8 @@ decision:
   false_negative_costs: [3, 5, 10]
 
 # M5: the one setup `make train` fits on all of train and saves, with the costs above.
-# A placeholder until reports/tables/decision.csv is read (M5 plan, Task 6).
+# Chosen 2026-10-11 from reports/tables/decision.csv: lowest expected cost at 3:1 and
+# 5:1, and no class weights needed once the threshold is tuned.
 final:
   experiment: lgbm
   calibration: sigmoid
