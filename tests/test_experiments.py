@@ -32,6 +32,7 @@ def test_one_row_per_experiment_with_all_metrics(train, tmp_path):
     table = run_experiments(small_cfg(tmp_path), train)
     assert table["experiment"].tolist() == [e.name for e in BASE.experiments]
     assert "sampler" in table.columns
+    assert "features" in table.columns
     for metric in METRICS:
         assert f"{metric}_mean" in table.columns
         assert f"{metric}_std" in table.columns
@@ -47,6 +48,15 @@ def test_sampler_column_names_the_resampler(train, tmp_path):
     )
     table = run_experiments(small_cfg(tmp_path, experiments=experiments), train)
     assert table["sampler"].tolist() == ["none", "undersample"]
+
+
+def test_features_column_names_the_groups(train, tmp_path):
+    experiments = (
+        Experiment("lr", "logreg"),
+        Experiment("lr_feat", "logreg", features=("delinquency", "trend")),
+    )
+    table = run_experiments(small_cfg(tmp_path, experiments=experiments), train)
+    assert table["features"].tolist() == ["none", "delinquency+trend"]
 
 
 def test_dummy_is_chance_level_and_models_beat_it(train, tmp_path):

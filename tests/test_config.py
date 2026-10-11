@@ -173,6 +173,16 @@ def test_repo_configs_load():
         "lgbm_weighted",
         "lgbm_undersample",
         "lgbm_smotenc",
+        "logreg_weighted_delinquency",
+        "logreg_weighted_payment",
+        "logreg_weighted_utilization",
+        "logreg_weighted_trend",
+        "logreg_weighted_allfeatures",
+        "lgbm_weighted_delinquency",
+        "lgbm_weighted_payment",
+        "lgbm_weighted_utilization",
+        "lgbm_weighted_trend",
+        "lgbm_weighted_allfeatures",
     ]
     assert smoke.experiments == base.experiments
 
@@ -228,6 +238,32 @@ def test_experiment_sampler_parsed_and_defaults_to_none(project):
     assert cfg.experiments[1].sampler == "smotenc"
 
 
+def test_experiment_features_parsed_and_default_to_empty(project):
+    path = write(
+        project,
+        "exp.yaml",
+        """\
+        extends: base.yaml
+        experiments:
+          - {name: plain, model: logreg}
+          - {name: engineered, model: logreg, features: [delinquency, trend]}
+        """,
+    )
+    cfg = load_config(path)
+    assert cfg.experiments[0].features == ()
+    assert cfg.experiments[1].features == ("delinquency", "trend")
+
+
+def test_experiment_features_null_means_none(project):
+    # Same as params: null and sampler: null, which are also read as "not set".
+    path = write(
+        project,
+        "exp.yaml",
+        "extends: base.yaml\nexperiments:\n  - {name: a, model: m, features: null}\n",
+    )
+    assert load_config(path).experiments[0].features == ()
+
+
 def test_experiments_default_to_empty(project):
     assert load_config(project / "configs" / "base.yaml").experiments == ()
 
@@ -240,6 +276,8 @@ def test_experiments_default_to_empty(project):
         ("experiments:\n  - {name: a, model: m, parms: {}}", "parms"),
         ("experiments:\n  - {name: a, model: m, params: 3}", "params"),
         ("experiments:\n  - {name: a, model: m, sampler: 3}", "sampler"),
+        ("experiments:\n  - {name: a, model: m, features: delinquency}", "features"),
+        ("experiments:\n  - {name: a, model: m, features: [1]}", "features"),
         ("experiments:\n  - {name: a, model: m}\n  - {name: a, model: n}", "Duplicate"),
     ],
 )

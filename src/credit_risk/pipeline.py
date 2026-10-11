@@ -4,9 +4,10 @@ A Pipeline is a chain of steps that acts like a single model: calling `.fit(X, y
 fits each step in order, and `.predict_proba(X)` runs X through every step. Here
 the chain is:
 
-    raw columns -> scale -> [resample] -> one-hot encode -> model -> probability of default
+    raw columns -> [add features] -> scale -> [resample] -> one-hot encode -> model
 
-The resample step is there only for experiments that name a `sampler` in the config.
+The bracketed steps are there only for experiments that list `features` or name a
+`sampler` in the config.
 
 Why pair preprocessing with the model instead of preprocessing once up front (as
 scratch.ipynb cell 4 did): during cross-validation, the scaler learns means and
@@ -32,6 +33,7 @@ from __future__ import annotations
 from imblearn.pipeline import Pipeline
 
 from credit_risk.config import Experiment
+from credit_risk.features import BINNED, build_feature_step, feature_columns
 from credit_risk.models import get_model
 from credit_risk.preprocess import build_encoder, build_scaler
 from credit_risk.samplers import get_sampler
@@ -41,21 +43,35 @@ def build_pipeline(experiment: Experiment, seed: int) -> Pipeline:
     """Return an unfitted pipeline for one experiment from the config.
 
     `experiment` is one entry of the `experiments` list in configs/base.yaml, for
-    example {name: lgbm_smotenc, model: lgbm, sampler: smotenc}. The steps are named
-    "scale", "sample" (only when the experiment has a sampler), "encode" and "model".
+    example {name: lgbm_weighted_delinquency, model: lgbm, features: [delinquency]}.
+    The steps are named "features" (only when the experiment lists features), "scale",
+    "sample" (only when it has a sampler), "encode" and "model".
     Nothing is trained here; experiments.py fits it.
     """
     # Look up the model by name (raises ValueError on a typo like "lgmb").
     model = get_model(experiment.model, experiment.params, seed)
-    # `steps` is a list of (label, step) pairs, run in list order. Start with scaling.
-    steps = [("scale", build_scaler())]
+    # Engineered columns this experiment adds (empty when it lists no features).
+    # Raises ValueError on a typo like "delinquncy", before any fitting starts.
+    extra = feature_columns(experiment.features)
+    binned = [c for c in BINNED if c in extra]  # e.g. utilization, when its group is on
+    if extra and experiment.sampler == "smotenc":
+        # SMOTENC would interpolate count columns such as months_late into values like
+        # 2.4. Supporting it means listing those columns as categorical in samplers.py;
+        # no experiment needs it yet.
+        raise ValueError("sampler 'smotenc' cannot be combined with features yet")
+
+    # `steps` is a list of (label, step) pairs, run in list order.
+    steps = []
+    if extra:
+        steps.append(("features", build_feature_step(experiment.features)))
+    steps.append(("scale", build_scaler(extra)))
     # experiment.sampler is the `sampler:` value from the config line, or None when the
     # line has none. Only experiments that name a sampler get a resample step.
     if experiment.sampler is not None:
         # Raises ValueError on a typo like "smote", before any fitting starts.
         steps.append(("sample", get_sampler(experiment.sampler, seed)))
-    # Every experiment ends the same way: one-hot encode, then the model.
-    steps += [("encode", build_encoder()), ("model", model)]
+    # Every experiment ends the same way: one-hot encode (and bin), then the model.
+    steps += [("encode", build_encoder(extra, binned)), ("model", model)]
     # Steps are named by hand (make_pipeline would name them after their classes) so
     # other code can ask for pipe.named_steps["model"] whatever the model is.
     return Pipeline(steps)

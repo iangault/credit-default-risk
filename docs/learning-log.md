@@ -364,3 +364,146 @@ differences smaller than that cannot be told apart from fold-to-fold variation.
 - All three techniques push predicted probabilities above the true default rate, so
   they no longer read as real probabilities. M5's calibration step has to account for
   that if a weighted or resampled model is used.
+
+---
+
+### M4: Feature engineering (2026-10-10)
+
+#### 1. The idea
+
+Feature engineering means building new columns from the existing ones, so a pattern the
+model would have to work out for itself is handed to it directly. Example: the raw data
+has six PAY columns; `months_late` counts how many of them show a late payment.
+
+Logistic regression is expected to gain more than LightGBM:
+- Logistic regression gives each column one weight and adds them up. It cannot count
+  across columns, divide one by another, or compare months by itself.
+- Trees split one column at a time. They can build something close to "late in several
+  months" from a few splits, but rebuilding a ratio such as bill / limit takes many.
+
+#### 2. The four groups
+
+| Group | Columns | Formula | Evidence (EDA section 6) |
+|---|---|---|---|
+| delinquency | `months_late`, `max_delay` | count of PAY_1..6 >= 1; max of PAY_1..6 | strongest single signals (AUC 0.72 and 0.71) |
+| payment | `pay_ratio`, `no_bill`, `months_zero_pay` | log1p(PAY_AMT1 / BILL_AMT2), 0 when no bill; flag for BILL_AMT2 <= 0; count of PAY_AMT1..6 == 0 | paying nothing doubles the default rate; defaulters over-represented at zero payment |
+| utilization | `utilization` (+ 10 bins) | BILL_AMT1 / LIMIT_BAL | U-shaped link to default |
+| trend | `util_change`, `delay_trend` | (BILL_AMT1 - BILL_AMT6) / LIMIT_BAL; mean PAY_1..3 minus mean PAY_4..6 | is debt growing, is the client falling further behind |
+
+#### 3. What adding features changes, and how the system handles it
+
+**Analogy:** think of the pipeline as an assembly line and each config line as an order
+ticket. The ticket says which model to build (`model:`), whether to adjust the parts mix
+(`sampler:`), and which extra parts to bolt on (`features:`). Before the line starts, a
+parts list is written from the ticket, and every station gets a copy, so the painting
+station knows to paint the new parts too and the packing station knows where they go in
+the box. A ticket with no extras gets the same line as before.
+
+What could go wrong when new columns appear, and what handles it:
+
+| Issue | How it is handled |
+|---|---|
+| Later steps select columns by name and drop anything not listed (`remainder="drop"`), so new columns would be silently lost | `feature_columns(groups)` turns the group names into column names (the "parts list") from one table, `FEATURE_GROUPS` in `features.py`. `build_pipeline` passes that list to `build_scaler(extra)` and `build_encoder(extra, binned)` |
+| The number of columns changes per experiment | Each experiment gets its own pipeline, built fresh. The model sees 28 columns with no features, 30 with delinquency, 39 with utilization (1 column + 10 bins), 46 with all four. A model only needs the same columns at fit and predict time, which the pipeline ensures since both go through the same steps |
+| Column order | Columns are selected by name in fixed groups: amounts, engineered columns, one-hot columns, bins, PAY codes |
+| A typo such as `features: [delinquncy]`, or a group listed twice | Raises an error when the pipelines are built, before any CV runs |
+| Leakage between folds | The features use only the client's own row, so they learn nothing. The utilization bin edges do learn from data, so they live inside the encode step and are fitted on each training fold only |
+| Divide by zero | `BILL_AMT2` is 0 or negative for about 10% of clients; their `pay_ratio` is set to 0 and `no_bill` flags them. `LIMIT_BAL` is never 0 |
+| Older results changing | The `features` step is added only when the list is non-empty, so M2 and M3 rows build the same pipeline. The 11 old rows came out identical |
+| SMOTENC with features | Refused with an error: it would interpolate counts such as `months_late` into values like 2.4 |
+
+**Model choice is separate from features.** `model:`, `sampler:` and `features:` are
+independent settings on the same line, so any model can be combined with any feature
+list. The results table records all three for each row, so each set of numbers can be
+traced to the setup that produced it.
+
+**The `+` in the results table.** In Python, an experiment's features are a list such as
+`("delinquency", "trend")`. A CSV cell holds one piece of text, so the row stores them
+joined into one label:
+
+```python
+"features": "+".join(experiment.features) or "none",
+```
+
+- `"+".join(...)` puts a `+` between the items: `"delinquency+trend"`. It is a label,
+  not addition; nothing reads it back to build a pipeline.
+- With no features, the join gives an empty string `""`, which Python treats as false,
+  so `or "none"` writes `none` instead of an empty cell (the same style as `sampler`).
+
+**How `build_pipeline` assembles the steps** (`src/credit_risk/pipeline.py`; the Python
+pieces are explained in M3, section 3). M4 adds one more `if` and passes `extra` along:
+
+```python
+extra = feature_columns(experiment.features)   # e.g. ["months_late", "max_delay"], or []
+binned = [c for c in BINNED if c in extra]     # ["utilization"] when that group is on
+steps = []
+if extra:                                      # true only if the list is not empty
+    steps.append(("features", build_feature_step(experiment.features)))
+steps.append(("scale", build_scaler(extra)))   # also scale the new columns
+if experiment.sampler is not None:
+    steps.append(("sample", get_sampler(experiment.sampler, seed)))
+steps += [("encode", build_encoder(extra, binned)), ("model", model)]  # also keep them
+return Pipeline(steps)
+```
+
+| Config line | `extra` | `if extra:` | Final steps |
+|---|---|---|---|
+| `logreg_weighted` (no `features:`) | `[]` | skipped | scale -> encode -> model (same as M3) |
+| `logreg_weighted_delinquency` | `["months_late", "max_delay"]` | adds the step | **features** -> scale -> encode -> model |
+
+The `if` lines decide which stations are on the line for this order. Passing `extra` to
+the scaler and encoder is the note to the later stations: "two new parts are coming;
+keep them." Without it, the encoder would drop `months_late` with no error, and the
+model would never see it.
+
+#### 4. Why logistic regression cannot follow a U-shape
+
+- One weight per column means a column's effect on the log-odds of default is a straight
+  line: as utilization rises, predicted risk can only rise steadily or fall steadily.
+- Utilization is U-shaped: default is higher for clients using almost none of their
+  limit, lowest around 1% to 13%, and highest at or over the limit. A straight line can
+  follow one side of the U, not both.
+- **Bins** split utilization into ranges, each its own 0/1 column with its own weight.
+  Worked example with three bins and made-up weights: low +0.3, middle -0.4, high +0.8.
+  A client is in one bin, so only that weight applies: a low-use client gets +0.3, a
+  middle one -0.4, a high one +0.8. That traces the U, which one weight cannot.
+- The project uses 10 quantile bins (about the same number of clients in each) and keeps
+  the raw column too.
+- Trees do not need bins: they can split utilization at several points on their own.
+
+#### 5. Results (5-fold CV on train)
+
+| experiment | ROC-AUC | PR-AUC | recall | precision |
+|---|---|---|---|---|
+| logreg_weighted (no features) | 0.723 | 0.500 | 0.647 | 0.377 |
+| + delinquency | 0.756 | 0.504 | 0.618 | 0.453 |
+| + payment | 0.747 | 0.500 | 0.615 | 0.438 |
+| + utilization | 0.746 | 0.491 | 0.621 | 0.437 |
+| + trend | 0.723 | 0.499 | 0.632 | 0.383 |
+| + all four | 0.762 | 0.503 | 0.616 | 0.454 |
+| lgbm_weighted (no features) | 0.775 | 0.555 | 0.617 | 0.465 |
+| + delinquency | 0.778 | 0.559 | 0.620 | 0.470 |
+| + payment | 0.776 | 0.554 | 0.617 | 0.472 |
+| + utilization | 0.776 | 0.553 | 0.616 | 0.462 |
+| + trend | 0.775 | 0.553 | 0.615 | 0.466 |
+| + all four | 0.777 | 0.556 | 0.615 | 0.471 |
+
+ROC-AUC varies by about 0.005 to 0.008 between folds (the `_std` columns), so smaller
+differences cannot be told apart from fold-to-fold variation.
+
+#### 6. What it shows
+
+- **Logistic regression gained, as expected.** All four groups lifted ROC-AUC from 0.723
+  to 0.762. Delinquency alone gave most of it (+0.033); payment and utilization about
+  +0.023 each; trend nothing.
+- **PR-AUC for logistic regression barely moved** (0.500 to 0.503), even though ROC-AUC
+  rose. A possible reason, not checked: the features improved the ordering lower down
+  the list more than at the top, where PR-AUC puts most of its weight. Utilization
+  alone lowered it slightly (0.491), within fold-to-fold variation.
+- **Precision rose** for logistic regression (0.377 to about 0.45) with a small drop in
+  recall (0.647 to about 0.62), at the same 0.5 cutoff.
+- **LightGBM did not gain beyond fold-to-fold variation.** The largest change was
+  +0.003 ROC-AUC (delinquency). It was already finding these patterns in the raw columns.
+- **For M5:** LightGBM with class weights is still the strongest. The features narrow the
+  gap to logistic regression from 0.052 to 0.015 ROC-AUC, which matters if an
+  easier-to-explain model is wanted. Which one to carry forward is a decision for M5.

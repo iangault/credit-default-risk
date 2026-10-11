@@ -21,6 +21,7 @@ costs:
 # Setups compared by `make experiments`, all on the same CV folds.
 # model: a name from credit_risk.models; params: passed to that model;
 # sampler (optional): a name from credit_risk.samplers, applied to training folds only.
+# features (optional): a list of groups from credit_risk.features.
 experiments:
   # M2: each model family at library defaults.
   - {name: dummy, model: dummy}
@@ -38,3 +39,16 @@ experiments:
   - {name: lgbm_weighted, model: lgbm, params: {class_weight: balanced}}
   - {name: lgbm_undersample, model: lgbm, sampler: undersample}
   - {name: lgbm_smotenc, model: lgbm, sampler: smotenc}
+  # M4: engineered features (src/credit_risk/features.py), each group alone and all
+  # four together, on the class-weighted models from M3. Compare each row with
+  # logreg_weighted or lgbm_weighted above, which see only the raw columns.
+  - {name: logreg_weighted_delinquency, model: logreg, params: {class_weight: balanced}, features: [delinquency]}
+  - {name: logreg_weighted_payment, model: logreg, params: {class_weight: balanced}, features: [payment]}
+  - {name: logreg_weighted_utilization, model: logreg, params: {class_weight: balanced}, features: [utilization]}
+  - {name: logreg_weighted_trend, model: logreg, params: {class_weight: balanced}, features: [trend]}
+  - {name: logreg_weighted_allfeatures, model: logreg, params: {class_weight: balanced}, features: [delinquency, payment, utilization, trend]}
+  - {name: lgbm_weighted_delinquency, model: lgbm, params: {class_weight: balanced}, features: [delinquency]}
+  - {name: lgbm_weighted_payment, model: lgbm, params: {class_weight: balanced}, features: [payment]}
+  - {name: lgbm_weighted_utilization, model: lgbm, params: {class_weight: balanced}, features: [utilization]}
+  - {name: lgbm_weighted_trend, model: lgbm, params: {class_weight: balanced}, features: [trend]}
+  - {name: lgbm_weighted_allfeatures, model: lgbm, params: {class_weight: balanced}, features: [delinquency, payment, utilization, trend]}
