@@ -52,6 +52,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import altair as alt
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
@@ -59,7 +60,7 @@ from sklearn.metrics import make_scorer
 from sklearn.model_selection import TunedThresholdClassifierCV
 
 from credit_risk.config import Config, ConfigError, Costs, Experiment
-from credit_risk.data import TARGET, load_split
+from credit_risk.data import TARGET, DataFileError, load_split
 from credit_risk.experiments import make_folds
 from credit_risk.pipeline import build_pipeline
 
@@ -213,3 +214,45 @@ def save_decision(table: pd.DataFrame, curves: pd.DataFrame, cfg: Config) -> tup
     # Altair saves PNGs through vl-convert (in environment.yml); scale_factor=2 for sharpness.
     plot_cost_curves(curves, cfg.costs.false_positive).save(plot_path, scale_factor=2)
     return table_path, plot_path
+
+
+def train_final(cfg: Config, train: pd.DataFrame | None = None) -> TunedThresholdClassifierCV:
+    """Fit the `final` setup from the config on all of train, with the config's costs.
+
+    Calibration and threshold come from cross-validation inside train (see the module
+    docstring); the test split is not read.
+    """
+    if cfg.final is None:
+        raise ConfigError(
+            "No 'final' section in the config. Run `make decide`, pick a setup from "
+            "reports/tables/decision.csv, and add it under 'final'."
+        )
+    if train is None:
+        train = load_split("train", cfg)
+    X, y = train.drop(columns=TARGET), train[TARGET]
+    experiment = {e.name: e for e in cfg.experiments}[cfg.final.experiment]
+    return build_decision_model(experiment, cfg.final.calibration, cfg.costs, cfg).fit(X, y)
+
+
+def model_path(cfg: Config) -> Path:
+    """Where the trained model is saved: artifacts/model.joblib (gitignored)."""
+    return cfg.paths.artifacts_dir / "model.joblib"
+
+
+def save_model(model: TunedThresholdClassifierCV, cfg: Config) -> Path:
+    """Save the fitted model (pipeline + calibration + threshold) with joblib."""
+    path = model_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # joblib writes the whole fitted object to one file; loading it gives back the same
+    # object, with predict_proba (calibrated) and predict (0/1 at the threshold).
+    joblib.dump(model, path)
+    return path
+
+
+def load_model(cfg: Config) -> TunedThresholdClassifierCV:
+    """Load the model saved by `make train`."""
+    path = model_path(cfg)
+    if not path.is_file():
+        raise DataFileError(f"{path} not found. Run `make train` first.")
+    # joblib files can run code when loaded, so only load files this project wrote.
+    return joblib.load(path)

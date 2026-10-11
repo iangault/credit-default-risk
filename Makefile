@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments decide all smoke
+.PHONY: help setup lint format test data split experiments decide train all smoke
 .NOTPARALLEL:
 
 help:
@@ -38,9 +38,10 @@ help:
 	@printf "%b\n" "$(CYAN)Step 3 - Decision layer:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make decide$(RESET)       - Compare calibrated, cost-tuned candidates on train;"
 	@printf "%b\n" "                      writes reports/tables/decision.csv and a cost plot"
+	@printf "%b\n" "  $(YELLOW)make train$(RESET)        - Fit the 'final' setup on train; saves artifacts/model.joblib"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
-	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments)"
+	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments, decide, train)"
 	@printf "%b\n" "  $(YELLOW)make smoke$(RESET)        - Run every step on a 1,000-row sample (what CI runs)"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)How the code fits together (src/credit_risk/, in order):$(RESET)"
@@ -107,10 +108,15 @@ decide:
 	$(RUN) decide
 	@printf "%b\n" "$(GREEN)Decision table complete.$(RESET)"
 
+train:
+	@printf "%b\n" "$(CYAN)Fitting the final setup on train...$(RESET)"
+	$(RUN) train
+	@printf "%b\n" "$(GREEN)Model saved.$(RESET)"
+
 # ─── Run everything ──────────────────────────────────────────────────────────
 
 # Steps in order; .NOTPARALLEL keeps them sequential even with make -j.
-all: data split experiments
+all: data split experiments decide train
 
 smoke:
 	@printf "%b\n" "$(CYAN)Smoke run: every step on a small sample...$(RESET)"

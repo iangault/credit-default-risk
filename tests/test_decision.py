@@ -7,16 +7,20 @@ import pytest
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.calibration import CalibratedClassifierCV
 
-from credit_risk.config import ConfigError, Costs, Decision, load_config
-from credit_risk.data import TARGET, clean, load_raw
+from credit_risk.config import ConfigError, Costs, Decision, Final, load_config
+from credit_risk.data import TARGET, DataFileError, clean, load_raw
 from credit_risk.decision import (
     build_decision_model,
     cost_plot_path,
     cost_scorer,
     decision_table_path,
     expected_cost,
+    load_model,
+    model_path,
     run_decision,
     save_decision,
+    save_model,
+    train_final,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -157,3 +161,25 @@ def test_save_decision_writes_table_and_plot(sample, tmp_path):
     assert plot_path == cost_plot_path(cfg)
     assert pd.read_csv(table_path)["experiment"].tolist() == table["experiment"].tolist()
     assert plot_path.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_train_final_saves_a_model_that_loads_and_predicts(sample, tmp_path):
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    model = train_final(cfg, X.assign(**{TARGET: y}))
+    path = save_model(model, cfg)
+    assert path == model_path(cfg) == tmp_path / "artifacts" / "model.joblib"
+    loaded = load_model(cfg)
+    assert loaded.best_threshold_ == model.best_threshold_
+    assert (loaded.predict(X) == model.predict(X)).all()
+
+
+def test_train_without_final_is_a_config_error(sample, tmp_path):
+    X, y = sample
+    with pytest.raises(ConfigError, match="final"):
+        train_final(small_cfg(tmp_path, final=None), X.assign(**{TARGET: y}))
+
+
+def test_load_model_before_train_is_a_data_file_error(tmp_path):
+    with pytest.raises(DataFileError, match="make train"):
+        load_model(small_cfg(tmp_path))
