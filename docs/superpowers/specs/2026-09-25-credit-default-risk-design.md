@@ -62,7 +62,9 @@ ROC-AUC. A technique that does not help is a valid, reported result.
   clone with no manual steps.
 - GitHub Actions runs `ruff` and `pytest` (including a smoke test of
   the full pipeline on a small sample) on every push and passes.
-- The test set is read by one stage only (`evaluate`), once.
+- The test set is read only by `evaluate` and `explain` (changed in
+  M6). Neither changes the model, and no setting is changed after
+  seeing their output.
 - The experiments table compares each technique against the same
   baseline under the same CV folds.
 - README lets a reader understand the problem, headline results, and
@@ -136,8 +138,8 @@ pipeline stages.
 | `make experiments` | train only | `reports/tables/experiments.csv` |
 | `make decide` | train only | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png` |
 | `make train` | train only | `artifacts/model.joblib` (pipeline + calibration + threshold) |
-| `make evaluate` | model + test | `reports/tables/test_metrics.csv`, figures |
-| `make explain` | model + test | SHAP figures in `reports/figures/` |
+| `make evaluate` | model + test | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png` |
+| `make explain` | model + test | `reports/figures/shap_summary.png`, `shap_client_flagged.png`, `shap_client_missed.png`; `reports/tables/shap_importance.csv` |
 | `make all` | | all of the above in order |
 
 Stage details:
@@ -159,10 +161,23 @@ Stage details:
   one fitted pipeline is kept for SHAP) inside
   `TunedThresholdClassifierCV` (scored by `expected_cost`).
 - **evaluate:** ROC-AUC, PR-AUC, recall and precision at the chosen
-  threshold, expected cost, calibration plot. The only stage that
-  reads `test.parquet`.
-- **explain:** SHAP computed on transformed features against the fitted
-  model step, global summary plus one or two individual clients.
+  threshold, expected cost, and counts (flagged, defaulters caught and
+  missed, false alarms) on the test set. Rows for the chosen model at
+  its threshold, the same model at 0.5, flag nobody, flag everyone,
+  and the train cross-validation estimate (read from
+  `experiments.csv` and `decision.csv`). Calibration plot: 10
+  equal-size groups by predicted probability, predicted vs actual
+  default rate.
+- **explain:** SHAP (`shap` package, `TreeExplainer`) computed on
+  transformed features against the fitted model step, in log-odds of
+  the model score before calibration; displayed values are the
+  original, unscaled ones. A beeswarm summary on the test set, and
+  waterfalls for two clients picked by a fixed rule: the correctly
+  flagged defaulter and the missed defaulter nearest their group's
+  median probability.
+- **Stale model check (M6):** `make train` also writes
+  `artifacts/model.json` (final setup, costs, seed); `evaluate` and
+  `explain` stop with a message if it does not match the config.
 
 ## Modules
 
@@ -179,8 +194,8 @@ means Claude writes it and explains the decisions.
 | `pipeline.py` | Compose features, preprocessor, optional resampler, model into one imblearn `Pipeline` | `build_pipeline(cfg)` | Author and Claude together |
 | `experiments.py` | Run CV comparisons from config | `run_experiments(cfg) -> DataFrame` | Author |
 | `decision.py` | Expected cost, calibration and cost-based threshold (M5) | `expected_cost(y_true, y_pred, costs)`, `build_decision_model(...)`, `run_decision(cfg)` | Claude (author chose this in M5) |
-| `evaluate.py` | Test-set metrics and calibration plot (M6) | `evaluate(model, X, y)` | Author |
-| `explain.py` | SHAP global and per-client explanations | `shap_summary(...)`, `explain_client(...)` | Author |
+| `evaluate.py` | Test-set metrics and calibration plot (M6) | `decision_metrics(y, proba, threshold, costs)`, `evaluate(model, test, cfg)` | Claude (author chose this in M6) |
+| `explain.py` | SHAP global and per-client explanations | `shap_explanation(model, X)`, `pick_clients(y, proba, threshold)` | Claude (author chose this in M6) |
 | `cli.py` | Subcommands for each stage | `credit-risk split / experiments / train / evaluate / explain` | Claude |
 
 Leakage rule: every fitted step (feature engineering, scaling,
@@ -241,7 +256,7 @@ plan when reached.
 | M3 | Imbalance experiments: class weights vs SMOTE vs random undersampling, PR-AUC added | Author | Comparison table plus a short explanation of why ROC-AUC changes little |
 | M4 | Feature engineering: utilization, payment-to-bill ratios, months delinquent, trend features | Author | With vs without comparison under the same CV |
 | M5 | Decision layer: calibration, cost-based threshold, `make decide`, `make train` | Claude (author chose this on 2026-10-11) | Comparison table and cost vs threshold plot; saved model with threshold |
-| M6 | Test and explain: `make evaluate`, `make explain` | Author | Final metrics and SHAP figures |
+| M6 | Test and explain: `make evaluate`, `make explain` | Claude (author chose this on 2026-10-11) | Final metrics and SHAP figures |
 | M7 | Write-up: README results, figures, limitations and fairness note | Author writes, Claude edits | README meets the 2-minute criterion |
 
 ## Learning process (milestones the author owns)
