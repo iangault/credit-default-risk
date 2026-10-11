@@ -1,3 +1,4 @@
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from credit_risk.decision import (
     expected_cost,
     load_model,
     model_path,
+    model_settings,
+    model_settings_path,
     plot_cost_curves,
     run_decision,
     save_decision,
@@ -198,3 +201,31 @@ def test_plot_says_what_the_dashed_line_marks():
     )
     title = plot_cost_curves(curves, false_positive_cost=1.0).to_dict()["title"]
     assert "rule of thumb" in title["subtitle"]
+
+
+def test_save_model_records_its_settings(sample, tmp_path):
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
+    saved = json.loads(model_settings_path(cfg).read_text())
+    assert saved == model_settings(cfg)
+    assert saved["experiment"] == "logreg"
+    assert saved["false_negative"] == cfg.costs.false_negative
+
+
+def test_load_model_refuses_a_model_from_other_settings(sample, tmp_path):
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
+    changed = replace(cfg, final=Final("logreg", "isotonic"))
+    with pytest.raises(DataFileError, match="make train"):
+        load_model(changed)
+
+
+def test_load_model_refuses_a_model_without_settings(sample, tmp_path):
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
+    model_settings_path(cfg).unlink()
+    with pytest.raises(DataFileError, match="make train"):
+        load_model(cfg)

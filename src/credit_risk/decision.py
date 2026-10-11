@@ -49,6 +49,7 @@ the inner pipeline is fitted (k + 1) * (k + 1) times: 36 with 5 folds.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -247,6 +248,29 @@ def model_path(cfg: Config) -> Path:
     return cfg.paths.artifacts_dir / "model.joblib"
 
 
+def model_settings_path(cfg: Config) -> Path:
+    """Where make train records the settings it used: artifacts/model.json."""
+    return cfg.paths.artifacts_dir / "model.json"
+
+
+def model_settings(cfg: Config) -> dict:
+    """The config settings that determine the saved model.
+
+    make train writes these next to the model; load_model compares them with the current
+    config, so a model trained before `final` or `costs` changed is not used by mistake.
+    """
+    if cfg.final is None:
+        raise ConfigError("No 'final' section in the config; set it and run `make train`.")
+    return {
+        "experiment": cfg.final.experiment,
+        "calibration": cfg.final.calibration,
+        "false_negative": cfg.costs.false_negative,
+        "false_positive": cfg.costs.false_positive,
+        "seed": cfg.seed,
+        "cv_folds": cfg.cv_folds,
+    }
+
+
 def save_model(model: TunedThresholdClassifierCV, cfg: Config) -> Path:
     """Save the fitted model (pipeline + calibration + threshold) with joblib."""
     path = model_path(cfg)
@@ -254,13 +278,22 @@ def save_model(model: TunedThresholdClassifierCV, cfg: Config) -> Path:
     # joblib writes the whole fitted object to one file; loading it gives back the same
     # object, with predict_proba (calibrated) and predict (0/1 at the threshold).
     joblib.dump(model, path)
+    # A small, readable record of what this model was trained with (see load_model).
+    model_settings_path(cfg).write_text(json.dumps(model_settings(cfg), indent=2) + "\n")
     return path
 
 
 def load_model(cfg: Config) -> TunedThresholdClassifierCV:
-    """Load the model saved by `make train`."""
+    """Load the model saved by make train, after checking it matches the config."""
     path = model_path(cfg)
     if not path.is_file():
         raise DataFileError(f"{path} not found. Run `make train` first.")
+    settings_path = model_settings_path(cfg)
+    saved = json.loads(settings_path.read_text()) if settings_path.is_file() else None
+    if saved != model_settings(cfg):
+        raise DataFileError(
+            f"{path} was trained with different settings ({saved}) than the config "
+            f"({model_settings(cfg)}). Run `make train` again."
+        )
     # joblib files can run code when loaded, so only load files this project wrote.
     return joblib.load(path)
