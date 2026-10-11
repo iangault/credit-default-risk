@@ -406,7 +406,7 @@ What could go wrong when new columns appear, and what handles it:
 | Later steps select columns by name and drop anything not listed (`remainder="drop"`), so new columns would be silently lost | `feature_columns(groups)` turns the group names into column names (the "parts list") from one table, `FEATURE_GROUPS` in `features.py`. `build_pipeline` passes that list to `build_scaler(extra)` and `build_encoder(extra, binned)` |
 | The number of columns changes per experiment | Each experiment gets its own pipeline, built fresh. The model sees 28 columns with no features, 30 with delinquency, 39 with utilization (1 column + 10 bins), 46 with all four. A model only needs the same columns at fit and predict time, which the pipeline ensures since both go through the same steps |
 | Column order | Columns are selected by name in fixed groups: amounts, engineered columns, one-hot columns, bins, PAY codes |
-| A typo such as `features: [delinquncy]` | Raises an error naming the valid groups when the pipelines are built, before any CV runs |
+| A typo such as `features: [delinquncy]`, or a group listed twice | Raises an error when the pipelines are built, before any CV runs |
 | Leakage between folds | The features use only the client's own row, so they learn nothing. The utilization bin edges do learn from data, so they live inside the encode step and are fitted on each training fold only |
 | Divide by zero | `BILL_AMT2` is 0 or negative for about 10% of clients; their `pay_ratio` is set to 0 and `no_bill` flags them. `LIMIT_BAL` is never 0 |
 | Older results changing | The `features` step is added only when the list is non-empty, so M2 and M3 rows build the same pipeline. The 11 old rows came out identical |
@@ -435,6 +435,7 @@ pieces are explained in M3, section 3). M4 adds one more `if` and passes `extra`
 
 ```python
 extra = feature_columns(experiment.features)   # e.g. ["months_late", "max_delay"], or []
+binned = [c for c in BINNED if c in extra]     # ["utilization"] when that group is on
 steps = []
 if extra:                                      # true only if the list is not empty
     steps.append(("features", build_feature_step(experiment.features)))
@@ -487,8 +488,8 @@ model would never see it.
 | + trend | 0.775 | 0.553 | 0.615 | 0.466 |
 | + all four | 0.777 | 0.556 | 0.615 | 0.471 |
 
-ROC-AUC varies by about 0.005 between folds, so smaller differences cannot be told
-apart from fold-to-fold variation.
+ROC-AUC varies by about 0.005 to 0.008 between folds (the `_std` columns), so smaller
+differences cannot be told apart from fold-to-fold variation.
 
 #### 6. What it shows
 
@@ -498,7 +499,7 @@ apart from fold-to-fold variation.
 - **PR-AUC for logistic regression barely moved** (0.500 to 0.503), even though ROC-AUC
   rose. A possible reason, not checked: the features improved the ordering lower down
   the list more than at the top, where PR-AUC puts most of its weight. Utilization
-  alone lowered it slightly (0.491).
+  alone lowered it slightly (0.491), within fold-to-fold variation.
 - **Precision rose** for logistic regression (0.377 to about 0.45) with a small drop in
   recall (0.647 to about 0.62), at the same 0.5 cutoff.
 - **LightGBM did not gain beyond fold-to-fold variation.** The largest change was
