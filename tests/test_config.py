@@ -6,6 +6,8 @@ import pytest
 from credit_risk.config import (
     Config,
     ConfigError,
+    Decision,
+    Final,
     default_config_path,
     find_project_root,
     load_config,
@@ -184,6 +186,13 @@ def test_repo_configs_load():
         "lgbm_weighted_trend",
         "lgbm_weighted_allfeatures",
     ]
+    assert base.decision is not None
+    assert base.decision.candidates == ("lgbm", "lgbm_weighted", "logreg_weighted_allfeatures")
+    assert base.decision.calibration == ("sigmoid", "isotonic")
+    assert base.decision.false_negative_costs == (3.0, 5.0, 10.0)
+    assert base.final is not None
+    assert smoke.decision == base.decision
+    assert smoke.final == base.final
     assert smoke.experiments == base.experiments
 
 
@@ -283,5 +292,52 @@ def test_experiments_default_to_empty(project):
 )
 def test_invalid_experiments_raise(project, block, fragment):
     path = write(project, "bad.yaml", f"extends: base.yaml\n{block}\n")
+    with pytest.raises(ConfigError, match=fragment):
+        load_config(path)
+
+
+DECISION_BLOCK = """\
+extends: base.yaml
+experiments:
+  - {name: lr, model: logreg}
+  - {name: gbm, model: lgbm}
+decision:
+  candidates: [lr, gbm]
+  calibration: [sigmoid, isotonic]
+  false_negative_costs: [3, 5.5]
+final:
+  experiment: gbm
+  calibration: isotonic
+"""
+
+
+def test_decision_and_final_parsed(project):
+    cfg = load_config(write(project, "dec.yaml", DECISION_BLOCK))
+    assert cfg.decision == Decision(("lr", "gbm"), ("sigmoid", "isotonic"), (3.0, 5.5))
+    assert cfg.final == Final("gbm", "isotonic")
+
+
+def test_decision_and_final_default_to_none(project):
+    cfg = load_config(project / "configs" / "base.yaml")
+    assert cfg.decision is None
+    assert cfg.final is None
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "fragment"),
+    [
+        ("candidates: [lr, gbm]", "candidates: [lr, gmb]", "decision.candidates"),
+        ("candidates: [lr, gbm]", "candidates: []", "decision.candidates"),
+        ("calibration: [sigmoid, isotonic]", "calibration: [platt]", "decision.calibration"),
+        ("false_negative_costs: [3, 5.5]", "false_negative_costs: [0]", "false_negative_costs"),
+        ("false_negative_costs: [3, 5.5]", "false_negative_costs: 5", "false_negative_costs"),
+        ("  experiment: gbm", "  experiment: forest", "final.experiment"),
+        ("  calibration: isotonic", "  calibration: [isotonic]", "final.calibration"),
+        ("  calibration: isotonic\n", "", "final"),
+    ],
+)
+def test_invalid_decision_and_final_raise(project, old, new, fragment):
+    assert old in DECISION_BLOCK
+    path = write(project, "bad.yaml", DECISION_BLOCK.replace(old, new))
     with pytest.raises(ConfigError, match=fragment):
         load_config(path)

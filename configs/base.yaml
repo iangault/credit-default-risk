@@ -52,3 +52,17 @@ experiments:
   - {name: lgbm_weighted_utilization, model: lgbm, params: {class_weight: balanced}, features: [utilization]}
   - {name: lgbm_weighted_trend, model: lgbm, params: {class_weight: balanced}, features: [trend]}
   - {name: lgbm_weighted_allfeatures, model: lgbm, params: {class_weight: balanced}, features: [delinquency, payment, utilization, trend]}
+
+# M5: what `make decide` compares. Each candidate (a name from the experiments list) is
+# calibrated with each method and given the cutoff with the lowest expected cost, once
+# for each cost of a missed defaulter below. A false alarm stays at costs.false_positive.
+decision:
+  candidates: [lgbm, lgbm_weighted, logreg_weighted_allfeatures]
+  calibration: [sigmoid, isotonic]
+  false_negative_costs: [3, 5, 10]
+
+# M5: the one setup `make train` fits on all of train and saves, with the costs above.
+# A placeholder until reports/tables/decision.csv is read (M5 plan, Task 6).
+final:
+  experiment: lgbm
+  calibration: sigmoid
