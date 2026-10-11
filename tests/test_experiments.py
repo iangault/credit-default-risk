@@ -6,10 +6,11 @@ import pandas as pd
 import pytest
 
 from credit_risk.config import ConfigError, Experiment, load_config
-from credit_risk.data import clean, load_raw
+from credit_risk.data import TARGET, clean, load_raw
 from credit_risk.experiments import (
     METRICS,
     experiments_table_path,
+    make_folds,
     run_experiments,
     save_experiments,
 )
@@ -101,3 +102,12 @@ def test_save_writes_csv_under_reports_tables(train, tmp_path):
         path == experiments_table_path(cfg) == tmp_path / "reports" / "tables" / "experiments.csv"
     )
     assert pd.read_csv(path)["experiment"].tolist() == ["dummy"]
+
+
+def test_make_folds_uses_config_folds_and_seed(train, tmp_path):
+    cfg = small_cfg(tmp_path)
+    X, y = train.drop(columns=TARGET), train[TARGET]
+    first = [test.tolist() for _, test in make_folds(cfg).split(X, y)]
+    second = [test.tolist() for _, test in make_folds(cfg).split(X, y)]
+    assert len(first) == cfg.cv_folds
+    assert first == second
