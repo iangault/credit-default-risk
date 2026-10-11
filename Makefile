@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments all smoke
+.PHONY: help setup lint format test data split experiments decide all smoke
 .NOTPARALLEL:
 
 help:
@@ -34,6 +34,10 @@ help:
 	@printf "%b\n" "$(CYAN)Step 2 - Model comparison:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make experiments$(RESET)  - Cross-validate each model in the config on train;"
 	@printf "%b\n" "                      writes reports/tables/experiments.csv"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 3 - Decision layer:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make decide$(RESET)       - Compare calibrated, cost-tuned candidates on train;"
+	@printf "%b\n" "                      writes reports/tables/decision.csv and a cost plot"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments)"
@@ -95,6 +99,13 @@ experiments:
 	@printf "%b\n" "$(CYAN)Cross-validating each experiment on train...$(RESET)"
 	$(RUN) experiments
 	@printf "%b\n" "$(GREEN)Experiments complete.$(RESET)"
+
+# ─── Step 3: Decision layer ──────────────────────────────────────────────────
+
+decide:
+	@printf "%b\n" "$(CYAN)Comparing calibrated, cost-tuned candidates on train (about 5 minutes)...$(RESET)"
+	$(RUN) decide
+	@printf "%b\n" "$(GREEN)Decision table complete.$(RESET)"
 
 # ─── Run everything ──────────────────────────────────────────────────────────
 

@@ -49,13 +49,17 @@ the inner pipeline is fitted (k + 1) * (k + 1) times: 36 with 5 folds.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
+import altair as alt
 import numpy as np
+import pandas as pd
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import TunedThresholdClassifierCV
 
-from credit_risk.config import Config, Costs, Experiment
+from credit_risk.config import Config, ConfigError, Costs, Experiment
+from credit_risk.data import TARGET, load_split
 from credit_risk.experiments import make_folds
 from credit_risk.pipeline import build_pipeline
 
@@ -107,3 +111,105 @@ def build_decision_model(
         # Keep the cost at every cutoff tried (cv_results_), for the cost vs threshold plot.
         store_cv_results=True,
     )
+
+
+def run_decision(
+    cfg: Config, train: pd.DataFrame | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Fit every candidate x calibration x cost combination in cfg.decision.
+
+    Returns (table, curves). table: one row per combination with the chosen threshold
+    and its cross-validated expected cost per client. curves: the expected cost at every
+    cutoff tried, for the plot. `train` is optional so tests can pass a small sample.
+    """
+    if cfg.decision is None:
+        raise ConfigError("No 'decision' section in the config; add one to run `make decide`.")
+    if train is None:
+        train = load_split("train", cfg)
+    X, y = train.drop(columns=TARGET), train[TARGET]
+    experiments = {e.name: e for e in cfg.experiments}
+
+    rows, curves = [], []
+    for name in cfg.decision.candidates:
+        for method in cfg.decision.calibration:
+            for false_negative_cost in cfg.decision.false_negative_costs:
+                costs = Costs(false_negative_cost, cfg.costs.false_positive)
+                model = build_decision_model(experiments[name], method, costs, cfg).fit(X, y)
+                setup = {
+                    "experiment": name,
+                    "calibration": method,
+                    "false_negative_cost": false_negative_cost,
+                }
+                # The scorer reports costs negated (see cost_scorer), so flip them back.
+                # best_score_ is the cheapest cutoff's cost averaged over the folds. It is
+                # slightly optimistic, since that cutoff was picked on the same folds.
+                rows.append(
+                    {
+                        **setup,
+                        "threshold": model.best_threshold_,
+                        "expected_cost": -model.best_score_,
+                    }
+                )
+                curves.append(
+                    pd.DataFrame(
+                        {
+                            **setup,
+                            "threshold": model.cv_results_["thresholds"],
+                            "expected_cost": -model.cv_results_["scores"],
+                        }
+                    )
+                )
+    return pd.DataFrame(rows), pd.concat(curves, ignore_index=True)
+
+
+def plot_cost_curves(curves: pd.DataFrame, false_positive_cost: float) -> alt.FacetChart:
+    """Expected cost per client against threshold: one panel per cost of a missed
+    defaulter, one line per candidate and calibration method.
+
+    The dashed gray line marks the rule of thumb false_positive / (false_positive +
+    false_negative), where the best cutoff lands if the probabilities are honest.
+    """
+    data = curves.assign(
+        rule_of_thumb=false_positive_cost / (false_positive_cost + curves["false_negative_cost"])
+    )
+    lines = (
+        alt.Chart()
+        .mark_line()
+        .encode(
+            x=alt.X("threshold:Q", title="Threshold"),
+            # zero=False: start the axis near the curve's minimum so the dip is visible.
+            y=alt.Y(
+                "expected_cost:Q", title="Expected cost per client", scale=alt.Scale(zero=False)
+            ),
+            color=alt.Color("experiment:N", title="Candidate"),
+            strokeDash=alt.StrokeDash("calibration:N", title="Calibration"),
+        )
+    )
+    rule = alt.Chart().mark_rule(color="gray", strokeDash=[2, 2]).encode(x="mean(rule_of_thumb):Q")
+    return (
+        alt.layer(lines, rule, data=data)
+        .facet(column=alt.Column("false_negative_cost:O", title="Cost of a missed defaulter"))
+        # Each panel's costs sit on a different scale (higher miss cost, higher cost).
+        .resolve_scale(y="independent")
+    )
+
+
+def decision_table_path(cfg: Config) -> Path:
+    """Where the comparison table is written: reports/tables/decision.csv."""
+    return cfg.paths.reports_dir / "tables" / "decision.csv"
+
+
+def cost_plot_path(cfg: Config) -> Path:
+    """Where the plot is written: reports/figures/cost_vs_threshold.png."""
+    return cfg.paths.reports_dir / "figures" / "cost_vs_threshold.png"
+
+
+def save_decision(table: pd.DataFrame, curves: pd.DataFrame, cfg: Config) -> tuple[Path, Path]:
+    """Write the table (rounded to 4 decimals) and the plot; return both paths."""
+    table_path, plot_path = decision_table_path(cfg), cost_plot_path(cfg)
+    for path in (table_path, plot_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    table.round(4).to_csv(table_path, index=False)
+    # Altair saves PNGs through vl-convert (in environment.yml); scale_factor=2 for sharpness.
+    plot_cost_curves(curves, cfg.costs.false_positive).save(plot_path, scale_factor=2)
+    return table_path, plot_path
