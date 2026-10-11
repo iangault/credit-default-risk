@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments decide train evaluate all smoke
+.PHONY: help setup lint format test data split experiments decide train evaluate explain all smoke
 .NOTPARALLEL:
 
 help:
@@ -43,9 +43,10 @@ help:
 	@printf "%b\n" "$(CYAN)Step 4 - Test and explain:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make evaluate$(RESET)     - Score the saved model on the test set;"
 	@printf "%b\n" "                      writes reports/tables/test_metrics.csv and a calibration plot"
+	@printf "%b\n" "  $(YELLOW)make explain$(RESET)      - SHAP figures for the test set and two example clients"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
-	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments, decide, train)"
+	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data through explain)"
 	@printf "%b\n" "  $(YELLOW)make smoke$(RESET)        - Run every step on a 1,000-row sample (what CI runs)"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)How the code fits together (src/credit_risk/, in order):$(RESET)"
@@ -125,10 +126,15 @@ evaluate:
 	$(RUN) evaluate
 	@printf "%b\n" "$(GREEN)Evaluation complete.$(RESET)"
 
+explain:
+	@printf "%b\n" "$(CYAN)Explaining the saved model's test predictions with SHAP...$(RESET)"
+	$(RUN) explain
+	@printf "%b\n" "$(GREEN)Explanations complete.$(RESET)"
+
 # ─── Run everything ──────────────────────────────────────────────────────────
 
 # Steps in order; .NOTPARALLEL keeps them sequential even with make -j.
-all: data split experiments decide train
+all: data split experiments decide train evaluate explain
 
 smoke:
 	@printf "%b\n" "$(CYAN)Smoke run: every step on a small sample...$(RESET)"

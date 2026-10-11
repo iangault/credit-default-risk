@@ -1,6 +1,6 @@
 """Command-line entry point: one subcommand per pipeline stage.
 
-Usage: credit-risk [--config PATH] {data,split,experiments,decide,train,evaluate}
+Usage: credit-risk [--config PATH] {data,split,experiments,decide,train,evaluate,explain}
 
 Add a subcommand here as each new stage is built.
 """
@@ -24,6 +24,7 @@ from credit_risk.data import (
 from credit_risk.decision import load_model, run_decision, save_decision, save_model, train_final
 from credit_risk.evaluate import evaluate, save_evaluation
 from credit_risk.experiments import run_experiments, save_experiments
+from credit_risk.explain import check_tree_model, save_explanations
 
 
 def _run_data(cfg: Config) -> None:
@@ -89,6 +90,17 @@ def _run_evaluate(cfg: Config) -> None:
     print(f"Wrote {table_path} and {plot_path}")
 
 
+def _run_explain(cfg: Config) -> None:
+    check_tree_model(cfg)  # before loading anything: SHAP here needs a tree model
+    model = load_model(cfg)
+    test = load_split("test", cfg)
+    paths, picks = save_explanations(model, test.drop(columns=TARGET), test[TARGET], cfg)
+    for name in ("flagged", "missed"):
+        if name not in picks:
+            print(f"No {name} defaulters in this test set; skipped that client's figure.")
+    print("Wrote " + ", ".join(str(path) for path in paths))
+
+
 _STAGES = {
     "data": _run_data,
     "split": _run_split,
@@ -96,6 +108,7 @@ _STAGES = {
     "decide": _run_decide,
     "train": _run_train,
     "evaluate": _run_evaluate,
+    "explain": _run_explain,
 }
 
 
@@ -117,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     stages.add_parser("train", help="fit the 'final' setup on all of train and save it")
     stages.add_parser("evaluate", help="score the saved model on the test set")
+    stages.add_parser("explain", help="SHAP figures for the saved model on the test set")
     return parser
 
 

@@ -29,7 +29,9 @@ each column's original value where the column keeps its name (LIMIT_BAL = 50000,
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import shap
@@ -37,6 +39,10 @@ from imblearn.pipeline import Pipeline
 from sklearn.model_selection import TunedThresholdClassifierCV
 
 from credit_risk.config import Config, ConfigError
+
+# "Agg" draws to files only (no window), so the figures work in CI and on a laptop
+# without popping up windows.
+plt.switch_backend("Agg")
 
 # Models shap.TreeExplainer can explain. The final model must be one of these.
 TREE_MODELS = ("lgbm", "xgboost", "forest")
@@ -104,3 +110,66 @@ def pick_clients(y: Sequence[int], proba: Sequence[float], threshold: float) -> 
         distance = np.abs(proba[rows] - np.median(proba[rows]))
         picks[name] = int(rows[np.argmin(distance)])  # ties: the first such row
     return picks
+
+
+def importance_table(explanation: shap.Explanation) -> pd.DataFrame:
+    """Mean absolute SHAP value per column: how much it moves scores on average."""
+    table = pd.DataFrame(
+        {
+            "feature": explanation.feature_names,
+            "mean_abs_shap": np.abs(explanation.values).mean(axis=0),
+        }
+    )
+    return table.sort_values("mean_abs_shap", ascending=False, ignore_index=True)
+
+
+def explain_paths(cfg: Config) -> dict[str, Path]:
+    """Where make explain writes each output."""
+    figures, tables = cfg.paths.reports_dir / "figures", cfg.paths.reports_dir / "tables"
+    return {
+        "summary": figures / "shap_summary.png",
+        "flagged": figures / "shap_client_flagged.png",
+        "missed": figures / "shap_client_missed.png",
+        "importance": tables / "shap_importance.csv",
+    }
+
+
+def _save_figure(path: Path, title: str) -> None:
+    plt.title(title, fontsize=10)
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close("all")  # start the next plot on a fresh figure
+
+
+def save_explanations(
+    model: TunedThresholdClassifierCV, X: pd.DataFrame, y: pd.Series, cfg: Config
+) -> tuple[list[Path], dict[str, int]]:
+    """Write the beeswarm, the two client waterfalls and the importance table.
+
+    Returns the paths written and the picked row numbers (a group with no clients has no
+    waterfall).
+    """
+    paths = explain_paths(cfg)
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+    explanation = shap_explanation(model, X)
+    written = []
+
+    shap.plots.beeswarm(explanation, max_display=15, show=False)
+    _save_figure(paths["summary"], "SHAP values on the test set (model score before calibration)")
+    written.append(paths["summary"])
+
+    proba = model.predict_proba(X)[:, 1]
+    picks = pick_clients(y, proba, model.best_threshold_)
+    labels = {"flagged": "correctly flagged defaulter", "missed": "missed defaulter"}
+    for name, row in picks.items():
+        shap.plots.waterfall(explanation[row], max_display=12, show=False)
+        _save_figure(
+            paths[name],
+            f"Client {X['ID'].iloc[row]}: {labels[name]} "
+            f"(calibrated probability {proba[row]:.2f}, threshold {model.best_threshold_:.2f})",
+        )
+        written.append(paths[name])
+
+    importance_table(explanation).round(4).to_csv(paths["importance"], index=False)
+    written.append(paths["importance"])
+    return written, picks

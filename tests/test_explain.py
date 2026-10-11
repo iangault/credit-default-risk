@@ -7,7 +7,15 @@ import pytest
 from credit_risk.config import ConfigError, Final, load_config
 from credit_risk.data import TARGET, clean, load_raw
 from credit_risk.decision import train_final
-from credit_risk.explain import check_tree_model, inner_pipeline, pick_clients, shap_explanation
+from credit_risk.explain import (
+    check_tree_model,
+    explain_paths,
+    importance_table,
+    inner_pipeline,
+    pick_clients,
+    save_explanations,
+    shap_explanation,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = load_config(ROOT / "configs" / "base.yaml")
@@ -83,3 +91,35 @@ def test_pick_clients_takes_the_median_of_each_group():
 def test_pick_clients_skips_an_empty_group():
     assert pick_clients([1, 0, 0], [0.9, 0.2, 0.1], 0.5) == {"flagged": 0}
     assert pick_clients([0, 0], [0.9, 0.1], 0.5) == {}
+
+
+def test_importance_table_is_sorted(fitted):
+    model, X, _ = fitted
+    table = importance_table(shap_explanation(model, X))
+    assert list(table.columns) == ["feature", "mean_abs_shap"]
+    assert len(table) == 28
+    assert table["mean_abs_shap"].is_monotonic_decreasing
+
+
+def test_save_explanations_writes_figures_and_table(fitted, tmp_path):
+    model, X, y = fitted
+    cfg = small_cfg(tmp_path)
+    paths, picks = save_explanations(model, X, y, cfg)
+    expected = explain_paths(cfg)
+    assert expected["summary"] in paths and expected["importance"] in paths
+    for name in picks:
+        assert expected[name] in paths
+    for path in paths:
+        assert path.is_file()
+        if path.suffix == ".png":
+            assert path.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_save_explanations_skips_missing_groups(fitted, tmp_path):
+    model, X, y = fitted
+    cfg = small_cfg(tmp_path)
+    non_defaulters = (y == 0).to_numpy()
+    paths, picks = save_explanations(model, X[non_defaulters], y[non_defaulters], cfg)
+    assert picks == {}
+    assert not explain_paths(cfg)["flagged"].exists()
+    assert explain_paths(cfg)["summary"] in paths

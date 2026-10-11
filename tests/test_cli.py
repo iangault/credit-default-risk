@@ -102,7 +102,7 @@ def test_experiments_stage_writes_table(tmp_path, capsys):
 
 def test_makefile_all_includes_every_stage():
     lines = (ROOT / "Makefile").read_text().splitlines()
-    assert "all: data split experiments decide train" in lines
+    assert "all: data split experiments decide train evaluate explain" in lines
 
 
 def shrink_decision(config):
@@ -170,3 +170,14 @@ def test_evaluate_before_train_prints_error(tmp_path, capsys):
     assert code == 1
     assert "make train" in err
     assert "Traceback" not in err
+
+
+@pytest.mark.filterwarnings("ignore:Found unknown categories:UserWarning")  # see above
+def test_explain_stage_writes_figures(tmp_path, capsys):
+    config = make_small_project(tmp_path, n_rows=300)
+    shrink_decision(config)
+    for stage in ["split", "train", "explain"]:
+        assert main(["--config", str(config), stage]) == 0
+    assert (tmp_path / "reports" / "figures" / "shap_summary.png").is_file()
+    assert (tmp_path / "reports" / "tables" / "shap_importance.csv").is_file()
+    assert "Wrote" in capsys.readouterr().out
