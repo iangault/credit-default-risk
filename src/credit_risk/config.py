@@ -185,7 +185,8 @@ def _experiments(value: Any) -> tuple[Experiment, ...]:
             raise ConfigError(f"'{where}.sampler' must be a sampler name, got {sampler!r}")
         # A list such as [delinquency, trend]. Group names are checked when the
         # pipeline is built (features.feature_columns), like model and sampler names.
-        features = item.get("features", [])
+        # `or []` also turns an explicit `features: null` into "none", like params.
+        features = item.get("features") or []
         if not isinstance(features, list) or not all(isinstance(f, str) for f in features):
             raise ConfigError(
                 f"'{where}.features' must be a list of feature group names, got {features!r}"

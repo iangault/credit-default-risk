@@ -81,6 +81,12 @@ def test_unknown_group_lists_valid_names():
         feature_columns(["delinquncy"])
 
 
+def test_repeated_group_is_refused():
+    # Listing a group twice would add its columns twice, which only fails once fitting starts.
+    with pytest.raises(ValueError, match="more than once"):
+        feature_columns(["delinquency", "trend", "delinquency"])
+
+
 def test_feature_step_adds_columns_in_a_pipeline_step():
     out = build_feature_step(["delinquency"]).fit_transform(client(PAY_1=1))
     assert out.loc[0, "months_late"] == 1

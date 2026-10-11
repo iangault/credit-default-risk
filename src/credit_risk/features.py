@@ -98,7 +98,8 @@ _BUILDERS = {
 def feature_columns(groups: Iterable[str]) -> list[str]:
     """Names of the columns the given groups add, in the order given.
 
-    Raise ValueError naming the valid options if a group is not in GROUP_NAMES.
+    Raise ValueError naming the valid options if a group is not in GROUP_NAMES, and
+    if a group is listed more than once.
     """
     groups = list(groups)
     unknown = [g for g in groups if g not in FEATURE_GROUPS]
@@ -106,6 +107,11 @@ def feature_columns(groups: Iterable[str]) -> list[str]:
         raise ValueError(
             f"Unknown feature group(s) {unknown}. Valid names: {', '.join(GROUP_NAMES)}"
         )
+    # A repeated group would add the same columns twice. The scaler refuses duplicate
+    # column names, but only when fitting starts, after earlier experiments have run.
+    repeated = sorted({g for g in groups if groups.count(g) > 1})
+    if repeated:
+        raise ValueError(f"Feature group(s) {repeated} listed more than once")
     return [column for g in groups for column in FEATURE_GROUPS[g]]
 
 

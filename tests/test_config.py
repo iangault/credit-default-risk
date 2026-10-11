@@ -254,6 +254,16 @@ def test_experiment_features_parsed_and_default_to_empty(project):
     assert cfg.experiments[1].features == ("delinquency", "trend")
 
 
+def test_experiment_features_null_means_none(project):
+    # Same as params: null and sampler: null, which are also read as "not set".
+    path = write(
+        project,
+        "exp.yaml",
+        "extends: base.yaml\nexperiments:\n  - {name: a, model: m, features: null}\n",
+    )
+    assert load_config(path).experiments[0].features == ()
+
+
 def test_experiments_default_to_empty(project):
     assert load_config(project / "configs" / "base.yaml").experiments == ()
 
