@@ -59,6 +59,8 @@ help:
 	@printf "%b\n" "  $(GREEN)6 pipeline.py$(RESET)     - [Features], scale, [resample], encode, model"
 	@printf "%b\n" "  $(GREEN)7 experiments.py$(RESET)  - Cross-validate each setup, results table"
 	@printf "%b\n" "  $(GREEN)8 decision.py$(RESET)     - Calibrate, tune threshold to costs, save model"
+	@printf "%b\n" "  $(GREEN)9 evaluate.py$(RESET)     - Test-set metrics, comparisons, calibration plot"
+	@printf "%b\n" "  $(GREEN)10 explain.py$(RESET)     - SHAP summary and example clients"
 	@printf "%b\n" "  $(GREEN)cli.py$(RESET)            - The credit-risk command; make targets call it"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(DIM)Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml$(RESET)"
