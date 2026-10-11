@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments decide train all smoke
+.PHONY: help setup lint format test data split experiments decide train evaluate all smoke
 .NOTPARALLEL:
 
 help:
@@ -39,6 +39,10 @@ help:
 	@printf "%b\n" "  $(YELLOW)make decide$(RESET)       - Compare calibrated, cost-tuned candidates on train;"
 	@printf "%b\n" "                      writes reports/tables/decision.csv and a cost plot"
 	@printf "%b\n" "  $(YELLOW)make train$(RESET)        - Fit the 'final' setup on train; saves artifacts/model.joblib"
+	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 4 - Test and explain:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make evaluate$(RESET)     - Score the saved model on the test set;"
+	@printf "%b\n" "                      writes reports/tables/test_metrics.csv and a calibration plot"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments, decide, train)"
@@ -113,6 +117,13 @@ train:
 	@printf "%b\n" "$(CYAN)Fitting the final setup on train...$(RESET)"
 	$(RUN) train
 	@printf "%b\n" "$(GREEN)Model saved.$(RESET)"
+
+# ─── Step 4: Test and explain ────────────────────────────────────────────────
+
+evaluate:
+	@printf "%b\n" "$(CYAN)Scoring the saved model on the test set...$(RESET)"
+	$(RUN) evaluate
+	@printf "%b\n" "$(GREEN)Evaluation complete.$(RESET)"
 
 # ─── Run everything ──────────────────────────────────────────────────────────
 

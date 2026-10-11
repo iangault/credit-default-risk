@@ -9,7 +9,16 @@ import pytest
 from credit_risk.config import Costs, Final, load_config
 from credit_risk.data import TARGET, clean, load_raw
 from credit_risk.decision import decision_table_path, train_final
-from credit_risk.evaluate import COLUMNS, decision_metrics, evaluate, train_estimate
+from credit_risk.evaluate import (
+    COLUMNS,
+    calibration_plot_path,
+    decision_metrics,
+    evaluate,
+    metrics_table_path,
+    plot_calibration,
+    save_evaluation,
+    train_estimate,
+)
 from credit_risk.experiments import experiments_table_path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,3 +120,23 @@ def test_evaluate_table_rows_and_baselines(data, tmp_path):
     assert rows.loc["flag everyone", "recall"] == 1
     assert len(proba) == len(test)
     assert np.array_equal(proba >= model.best_threshold_, model.predict(test.drop(columns=TARGET)))
+
+
+def test_calibration_plot_has_points_and_diagonal():
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 500)
+    y = (rng.uniform(0, 1, 500) < proba).astype(int)
+    spec = plot_calibration(y, proba).to_dict()
+    assert len(spec["layer"]) == 2  # observed points/line, and the diagonal
+    assert "Calibration" in spec["title"]["text"]
+
+
+def test_save_evaluation_writes_table_and_plot(data, tmp_path):
+    train, test = data
+    cfg = small_cfg(tmp_path)
+    table, proba = evaluate(train_final(cfg, train), test, cfg)
+    table_path, plot_path = save_evaluation(table, test[TARGET], proba, cfg)
+    assert table_path == metrics_table_path(cfg) == tmp_path / "reports/tables/test_metrics.csv"
+    assert plot_path == calibration_plot_path(cfg)
+    assert pd.read_csv(table_path)["setup"].tolist() == table["setup"].tolist()
+    assert plot_path.read_bytes()[:4] == b"\x89PNG"

@@ -146,3 +146,27 @@ def test_train_before_split_prints_error(tmp_path, capsys):
     assert code == 1
     assert "make split" in err
     assert "Traceback" not in err
+
+
+# The 300-row project's test split can hold an EDUCATION code its 240 training rows never
+# saw; the encoder sets it to all zeros by design (preprocess.py) and warns. Expected here.
+@pytest.mark.filterwarnings("ignore:Found unknown categories:UserWarning")
+def test_evaluate_stage_writes_metrics(tmp_path, capsys):
+    config = make_small_project(tmp_path, n_rows=300)
+    shrink_decision(config)
+    for stage in ["split", "train", "evaluate"]:
+        assert main(["--config", str(config), stage]) == 0
+    table = pd.read_csv(tmp_path / "reports" / "tables" / "test_metrics.csv")
+    assert table["setup"].iloc[0] == "model at tuned threshold"
+    assert (tmp_path / "reports" / "figures" / "calibration_test.png").is_file()
+    assert "flag everyone" in capsys.readouterr().out
+
+
+def test_evaluate_before_train_prints_error(tmp_path, capsys):
+    config = make_small_project(tmp_path)
+    assert main(["--config", str(config), "split"]) == 0
+    code = main(["--config", str(config), "evaluate"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "make train" in err
+    assert "Traceback" not in err

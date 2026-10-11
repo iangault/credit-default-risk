@@ -1,6 +1,6 @@
 """Command-line entry point: one subcommand per pipeline stage.
 
-Usage: credit-risk [--config PATH] {data,split,experiments,decide,train}
+Usage: credit-risk [--config PATH] {data,split,experiments,decide,train,evaluate}
 
 Add a subcommand here as each new stage is built.
 """
@@ -11,8 +11,18 @@ import argparse
 import sys
 
 from credit_risk.config import Config, ConfigError, default_config_path, load_config
-from credit_risk.data import TARGET, DataFileError, clean, load_raw, save_splits, split, verify_raw
-from credit_risk.decision import run_decision, save_decision, save_model, train_final
+from credit_risk.data import (
+    TARGET,
+    DataFileError,
+    clean,
+    load_raw,
+    load_split,
+    save_splits,
+    split,
+    verify_raw,
+)
+from credit_risk.decision import load_model, run_decision, save_decision, save_model, train_final
+from credit_risk.evaluate import evaluate, save_evaluation
 from credit_risk.experiments import run_experiments, save_experiments
 
 
@@ -62,12 +72,30 @@ def _run_train(cfg: Config) -> None:
     print(f"Wrote {path}")
 
 
+def _run_evaluate(cfg: Config) -> None:
+    model = load_model(cfg)  # stops if the model is missing or stale
+    test = load_split("test", cfg)
+    table, proba = evaluate(model, test, cfg)
+    table_path, plot_path = save_evaluation(table, test[TARGET], proba, cfg)
+    print(table.set_index("setup").round(3).to_string())
+    # The last row is the train estimate; its recall, precision and counts are always
+    # blank, so check only the four columns it should have.
+    estimate = table.iloc[-1][["threshold", "roc_auc", "pr_auc", "expected_cost"]]
+    if estimate.isna().any():
+        print(
+            "Note: part of the train estimate was not found; run `make experiments` and "
+            "`make decide` with the current config to fill it."
+        )
+    print(f"Wrote {table_path} and {plot_path}")
+
+
 _STAGES = {
     "data": _run_data,
     "split": _run_split,
     "experiments": _run_experiments,
     "decide": _run_decide,
     "train": _run_train,
+    "evaluate": _run_evaluate,
 }
 
 
@@ -88,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
         "decide", help="compare calibrated, cost-tuned candidates on train (config 'decision')"
     )
     stages.add_parser("train", help="fit the 'final' setup on all of train and save it")
+    stages.add_parser("evaluate", help="score the saved model on the test set")
     return parser
 
 

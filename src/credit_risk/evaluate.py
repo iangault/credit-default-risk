@@ -20,9 +20,12 @@ flagged or not), false_alarms (flagged clients who paid).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
+import altair as alt
 import numpy as np
 import pandas as pd
+from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     average_precision_score,
     precision_score,
@@ -125,3 +128,60 @@ def evaluate(
         {"setup": "train CV estimate", **train_estimate(cfg)},
     ]
     return pd.DataFrame(rows, columns=COLUMNS), proba
+
+
+def plot_calibration(y: Sequence[int], proba: Sequence[float]) -> alt.LayerChart:
+    """Predicted probability against the actual default rate, in 10 equal-size groups.
+
+    Clients are sorted by predicted probability and cut into 10 groups of about the same
+    size ("quantile"). Each point is one group: its average prediction (x) and the share
+    of its clients who defaulted (y). Points on the diagonal mean the probabilities are
+    honest: clients given about 30% default about 30% of the time.
+    """
+    observed, predicted = calibration_curve(y, proba, n_bins=10, strategy="quantile")
+    groups = pd.DataFrame({"predicted": predicted, "observed": observed})
+    top = float(max(predicted.max(), observed.max()))
+    diagonal = pd.DataFrame({"predicted": [0.0, top], "observed": [0.0, top]})
+    points = (
+        alt.Chart(groups)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("predicted:Q", title="Average predicted probability of default"),
+            y=alt.Y("observed:Q", title="Actual default rate"),
+        )
+    )
+    ideal = (
+        alt.Chart(diagonal)
+        .mark_line(color="gray", strokeDash=[4, 4])
+        .encode(x="predicted:Q", y="observed:Q")
+    )
+    return alt.layer(points, ideal).properties(
+        title=alt.TitleParams(
+            "Calibration on the test set",
+            subtitle="10 equal-size groups of clients; dashed line: perfect calibration",
+        ),
+        width=400,
+        height=400,
+    )
+
+
+def metrics_table_path(cfg: Config) -> Path:
+    """Where the test metrics are written: reports/tables/test_metrics.csv."""
+    return cfg.paths.reports_dir / "tables" / "test_metrics.csv"
+
+
+def calibration_plot_path(cfg: Config) -> Path:
+    """Where the calibration plot is written: reports/figures/calibration_test.png."""
+    return cfg.paths.reports_dir / "figures" / "calibration_test.png"
+
+
+def save_evaluation(
+    table: pd.DataFrame, y: Sequence[int], proba: Sequence[float], cfg: Config
+) -> tuple[Path, Path]:
+    """Write the table (rounded to 4 decimals) and the calibration plot; return both paths."""
+    table_path, plot_path = metrics_table_path(cfg), calibration_plot_path(cfg)
+    for path in (table_path, plot_path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    table.round(4).to_csv(table_path, index=False)
+    plot_calibration(y, proba).save(plot_path, scale_factor=2)
+    return table_path, plot_path
