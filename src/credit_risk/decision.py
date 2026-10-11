@@ -10,7 +10,8 @@ Three separate ideas, each handled by one piece:
   score to how often clients with that score actually default, learned from
   out-of-fold predictions. After it, 0.2 means "about 20 in 100 such clients default".
   Class weights (M3) push scores up; calibration undoes that. It keeps the order of
-  clients, so ROC-AUC does not change.
+  clients (sigmoid) or only merges nearby scores into ties (isotonic's staircase), so
+  ROC-AUC changes little or not at all.
 - Threshold (TunedThresholdClassifierCV, below): the cutoff above which a client is
   flagged. It tries about 100 cutoffs and keeps the one with the lowest expected cost.
   With honest probabilities there is a rule of thumb to check it against: flagging
@@ -101,8 +102,8 @@ def build_decision_model(
         method=calibration,
         cv=folds,
         # False: learn the calibration from out-of-fold scores, then keep one pipeline
-        # refit on all rows. True (the default) would keep k pipelines and average them,
-        # which would make M6's SHAP explanations harder.
+        # refit on all rows. The default ("auto", which acts as True here) would keep k
+        # pipelines and average them, which would make M6's SHAP explanations harder.
         ensemble=False,
     )
     return TunedThresholdClassifierCV(
@@ -192,6 +193,13 @@ def plot_cost_curves(curves: pd.DataFrame, false_positive_cost: float) -> alt.Fa
         .facet(column=alt.Column("false_negative_cost:O", title="Cost of a missed defaulter"))
         # Each panel's costs sit on a different scale (higher miss cost, higher cost).
         .resolve_scale(y="independent")
+        # The subtitle says what the dashed line is, for readers who only see the PNG.
+        .properties(
+            title=alt.TitleParams(
+                "Expected cost per client vs threshold (false alarm cost = 1)",
+                subtitle="Dashed gray line: rule of thumb 1 / (1 + cost of a missed defaulter)",
+            )
+        )
     )
 
 

@@ -17,6 +17,7 @@ from credit_risk.decision import (
     expected_cost,
     load_model,
     model_path,
+    plot_cost_curves,
     run_decision,
     save_decision,
     save_model,
@@ -183,3 +184,17 @@ def test_train_without_final_is_a_config_error(sample, tmp_path):
 def test_load_model_before_train_is_a_data_file_error(tmp_path):
     with pytest.raises(DataFileError, match="make train"):
         load_model(small_cfg(tmp_path))
+
+
+def test_plot_says_what_the_dashed_line_marks():
+    curves = pd.DataFrame(
+        {
+            "experiment": ["lgbm"] * 2,
+            "calibration": ["sigmoid"] * 2,
+            "false_negative_cost": [5.0] * 2,
+            "threshold": [0.1, 0.2],
+            "expected_cost": [0.6, 0.55],
+        }
+    )
+    title = plot_cost_curves(curves, false_positive_cost=1.0).to_dict()["title"]
+    assert "rule of thumb" in title["subtitle"]

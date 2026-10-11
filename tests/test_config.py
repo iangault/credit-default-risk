@@ -334,10 +334,22 @@ def test_decision_and_final_default_to_none(project):
         ("  experiment: gbm", "  experiment: forest", "final.experiment"),
         ("  calibration: isotonic", "  calibration: [isotonic]", "final.calibration"),
         ("  calibration: isotonic\n", "", "final"),
+        ("candidates: [lr, gbm]", "candidates: [lr, lr]", "more than once"),
+        ("calibration: [sigmoid, isotonic]", "calibration: [sigmoid, sigmoid]", "more than once"),
+        ("false_negative_costs: [3, 5.5]", "false_negative_costs: [5, 5.0]", "more than once"),
     ],
 )
 def test_invalid_decision_and_final_raise(project, old, new, fragment):
     assert old in DECISION_BLOCK
     path = write(project, "bad.yaml", DECISION_BLOCK.replace(old, new))
     with pytest.raises(ConfigError, match=fragment):
+        load_config(path)
+
+
+def test_decision_without_experiments_says_so(project):
+    block = DECISION_BLOCK.replace(
+        "experiments:\n  - {name: lr, model: logreg}\n  - {name: gbm, model: lgbm}\n", ""
+    )
+    path = write(project, "noexp.yaml", block)
+    with pytest.raises(ConfigError, match="no experiments are defined"):
         load_config(path)

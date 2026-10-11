@@ -244,12 +244,13 @@ def _decision(data: dict[str, Any], names: tuple[str, ...]) -> Decision:
         raise ConfigError(
             f"'decision.false_negative_costs' must be a non-empty list of numbers, got {costs!r}"
         )
+    false_negative_costs = tuple(_positive("decision.false_negative_costs", c) for c in costs)
+    # A repeated cost would refit the same setups and draw lines on top of each other.
+    _no_repeats("decision.false_negative_costs", false_negative_costs)
     return Decision(
         candidates=_names("decision.candidates", section["candidates"], names),
         calibration=_names("decision.calibration", section["calibration"], CALIBRATION_METHODS),
-        false_negative_costs=tuple(
-            _positive("decision.false_negative_costs", cost) for cost in costs
-        ),
+        false_negative_costs=false_negative_costs,
     )
 
 
@@ -263,6 +264,10 @@ def _final(data: dict[str, Any], names: tuple[str, ...]) -> Final:
 
 def _name(key: str, value: Any, valid: tuple[str, ...]) -> str:
     """Check that value is one of the valid names (an experiment or calibration method)."""
+    if not valid:
+        # Only experiment names can be empty: a config with decision or final but no
+        # experiments list. Without this, the message below would read "one of ; got".
+        raise ConfigError(f"'{key}' names an experiment, but no experiments are defined")
     if not isinstance(value, str) or value not in valid:
         raise ConfigError(f"'{key}' must be one of {', '.join(valid)}; got {value!r}")
     return value
@@ -272,7 +277,15 @@ def _names(key: str, value: Any, valid: tuple[str, ...]) -> tuple[str, ...]:
     """Check that value is a non-empty list of valid names."""
     if not isinstance(value, list) or not value:
         raise ConfigError(f"'{key}' must be a non-empty list of names, got {value!r}")
-    return tuple(_name(key, item, valid) for item in value)
+    names = tuple(_name(key, item, valid) for item in value)
+    _no_repeats(key, names)  # a repeat would refit the same setup for nothing
+    return names
+
+
+def _no_repeats(key: str, values: tuple[Any, ...]) -> None:
+    repeated = sorted({str(v) for v in values if values.count(v) > 1})
+    if repeated:
+        raise ConfigError(f"'{key}' lists {repeated} more than once")
 
 
 def _is_number(value: Any) -> bool:
