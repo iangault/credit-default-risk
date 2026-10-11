@@ -104,16 +104,16 @@ credit-default-risk/
 ├── environment.yml, pyproject.toml, Makefile, README.md, .pre-commit-config.yaml
 ├── .github/workflows/ci.yml
 ├── configs/
-│   ├── base.yaml          # paths, seed, CV folds, test size, cost matrix
-│   ├── experiments.yaml   # list of setups to compare
-│   ├── final.yaml         # chosen model and params for `make train`
+│   ├── base.yaml          # paths, seed, CV folds, test size, cost matrix,
+│   │                      # experiments, decision candidates, final setup
 │   └── smoke.yaml         # small sample, few folds, for the smoke test
 ├── data/
 │   ├── raw/UCI_Credit_Card.csv   # committed (about 2.8 MB)
 │   └── processed/                # gitignored
 ├── src/credit_risk/
 │   ├── config.py, data.py, features.py, preprocess.py, models.py,
-│   ├── pipeline.py, experiments.py, evaluate.py, explain.py, cli.py
+│   ├── pipeline.py, experiments.py, decision.py, evaluate.py,
+│   ├── explain.py, cli.py
 ├── tests/
 ├── notebooks/             # exploration and results write-up; import from the package
 ├── reports/{tables,figures}/     # small outputs, committed
@@ -134,6 +134,7 @@ pipeline stages.
 | `make data` | `data/raw/UCI_Credit_Card.csv` | hash check passes (fails with a clear message if the file changed) |
 | `make split` | raw CSV | `data/processed/train.parquet`, `test.parquet` |
 | `make experiments` | train only | `reports/tables/experiments.csv` |
+| `make decide` | train only | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png` |
 | `make train` | train only | `artifacts/model.joblib` (pipeline + calibration + threshold) |
 | `make evaluate` | model + test | `reports/tables/test_metrics.csv`, figures |
 | `make explain` | model + test | SHAP figures in `reports/figures/` |
@@ -146,9 +147,17 @@ Stage details:
   `PAY_1`, stratified 80/20 split with a fixed seed.
 - **experiments:** all comparisons use the same stratified CV folds on
   train. Metrics: ROC-AUC, PR-AUC, recall, precision, F1, fit time.
-- **train:** fit the final setup on all of train. Calibration and the
+- **decide (added in M5):** for each candidate setup, calibration
+  method (sigmoid, isotonic) and cost ratio listed under `decision` in
+  the config, fit a calibrated model with a cost-tuned threshold and
+  record the threshold and its cross-validated expected cost. The
+  author reads the table and plot, then sets `final` and `costs`.
+- **train:** fit the `final` setup on all of train. Calibration and the
   cost-based threshold are chosen from out-of-fold predictions on
-  train, never from test.
+  train, never from test. Built from scikit-learn wrappers:
+  `CalibratedClassifierCV` (sigmoid or isotonic, `ensemble=False`, so
+  one fitted pipeline is kept for SHAP) inside
+  `TunedThresholdClassifierCV` (scored by `expected_cost`).
 - **evaluate:** ROC-AUC, PR-AUC, recall and precision at the chosen
   threshold, expected cost, calibration plot. The only stage that
   reads `test.parquet`.
@@ -169,7 +178,8 @@ means Claude writes it and explains the decisions.
 | `models.py` | Registry of estimators by name, params from config | `get_model(name, params)` | Author |
 | `pipeline.py` | Compose features, preprocessor, optional resampler, model into one imblearn `Pipeline` | `build_pipeline(cfg)` | Author and Claude together |
 | `experiments.py` | Run CV comparisons from config | `run_experiments(cfg) -> DataFrame` | Author |
-| `evaluate.py` | Metrics, calibration, cost-based threshold | `pick_threshold(y, proba, costs)`, `evaluate(model, X, y)` | Author |
+| `decision.py` | Expected cost, calibration and cost-based threshold (M5) | `expected_cost(y_true, y_pred, costs)`, `build_decision_model(...)`, `run_decision(cfg)` | Claude (author chose this in M5) |
+| `evaluate.py` | Test-set metrics and calibration plot (M6) | `evaluate(model, X, y)` | Author |
 | `explain.py` | SHAP global and per-client explanations | `shap_summary(...)`, `explain_client(...)` | Author |
 | `cli.py` | Subcommands for each stage | `credit-risk split / experiments / train / evaluate / explain` | Claude |
 
@@ -180,7 +190,9 @@ and resampling applies to training folds only.
 Cost matrix: lives in `base.yaml` as the cost of a false negative
 (missed defaulter) and a false positive (false alarm). Starting values
 (e.g. 5 and 1) are chosen and justified in M5, and the README shows
-how the threshold shifts as the ratio changes.
+how the threshold shifts as the ratio changes. `make decide` compares
+the false negative costs listed under `decision` (3, 5, 10, with the
+false positive cost fixed at 1).
 
 ## Error handling
 
@@ -205,8 +217,10 @@ Tests check behaviour, not scores.
   limit gives a finite value).
 - **Pipeline:** fits and predicts on a small fixture in seconds;
   probabilities in [0, 1]; resampler only affects fit, not predict.
-- **Threshold:** `pick_threshold()` on a toy example with a hand-worked
-  answer.
+- **Cost:** `expected_cost()` on a toy example with a hand-worked
+  answer. The threshold search itself is scikit-learn's
+  (`TunedThresholdClassifierCV`); tests check that `predict` matches
+  `predict_proba >= threshold`.
 - **Smoke:** `make all` with `configs/smoke.yaml` (about 1,000 rows,
   2 folds) runs end to end in CI.
 
@@ -226,7 +240,7 @@ plan when reached.
 | M2 | Baseline rebuild: `preprocess.py` (Claude), `models.py` (author), `pipeline.py` (together), minimal `experiments.py` with dummy, logistic regression, LightGBM | Mixed | CV ROC-AUC for LightGBM is near the lab's (about 0.78), confirming the setup |
 | M3 | Imbalance experiments: class weights vs SMOTE vs random undersampling, PR-AUC added | Author | Comparison table plus a short explanation of why ROC-AUC changes little |
 | M4 | Feature engineering: utilization, payment-to-bill ratios, months delinquent, trend features | Author | With vs without comparison under the same CV |
-| M5 | Decision layer: calibration, cost-based threshold, `make train` | Author | Saved model with threshold; cost vs threshold plot |
+| M5 | Decision layer: calibration, cost-based threshold, `make decide`, `make train` | Claude (author chose this on 2026-10-11) | Comparison table and cost vs threshold plot; saved model with threshold |
 | M6 | Test and explain: `make evaluate`, `make explain` | Author | Final metrics and SHAP figures |
 | M7 | Write-up: README results, figures, limitations and fairness note | Author writes, Claude edits | README meets the 2-minute criterion |
 
@@ -251,4 +265,5 @@ features and discussing the implications.
 
 ## Open questions
 
-None blocking. Cost matrix values are decided in M5.
+None blocking. Cost matrix values and the final setup are decided in
+M5, after reading `make decide`'s output.

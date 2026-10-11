@@ -53,6 +53,7 @@ The modules in `src/credit_risk/`, in the order the pipeline uses them:
 | 5 | `models.py` | Turn a model name from the config into an unfitted model | (inside the pipeline) |
 | 6 | `pipeline.py` | Chain optional features, scaling, optional resampling, encoding, and a model into one object | (inside experiments) |
 | 7 | `experiments.py` | Cross-validate each setup and write a results table | `make experiments` |
+| 8 | `decision.py` | Calibrate a setup, tune its threshold to the error costs, compare candidates, save the final model | `make decide`, `make train` |
 | | `cli.py` | The `credit-risk` command; runs one stage at a time | |
 
 `make` targets call the `credit-risk` command, which calls the modules. Run `make help`
@@ -69,6 +70,8 @@ for the list of targets.
 | How is class imbalance handled? | `src/credit_risk/samplers.py` and the M3 rows in `configs/base.yaml` |
 | Which engineered features exist, and how are they built? | `src/credit_risk/features.py` and the M4 rows in `configs/base.yaml` |
 | How are models scored? | `src/credit_risk/experiments.py` |
+| How is the decision threshold chosen? | `src/credit_risk/decision.py` and the `decision` / `final` sections of `configs/base.yaml` |
+| Which setup was chosen, and why? | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png`, and the M5 learning log entry |
 | What were the results? | `reports/tables/experiments.csv` |
 | What does the data look like? | `notebooks/01-eda.ipynb` |
 | What is a given function supposed to do? | Its test in `tests/test_<module>.py` |
@@ -76,7 +79,7 @@ for the list of targets.
 
 ## What the tests check
 
-`make test` runs the suite (about 150 tests; many are one test run over several inputs).
+`make test` runs the suite (about 180 tests; many are one test run over several inputs).
 The tests check the code, not the model's quality: each one feeds a function an input
 with a known right answer, often a small made-up one, and checks the result.
 
@@ -92,10 +95,26 @@ with a known right answer, often a small made-up one, and checks the result.
 | `test_samplers.py` | Each sampler name builds the right resampler with the seed; a misspelled name fails |
 | `test_pipeline.py` | Every model fits and returns probabilities; resampling balances only the training rows; SMOTENC rows have real codes |
 | `test_experiments.py` | One results row per model; the dummy scores chance level and real models beat it; reruns match |
+| `test_decision.py` | Expected cost matches a hand-worked example; the scorer prefers cheaper predictions; predictions use the tuned threshold; the saved model loads and predicts the same |
 | `test_cli.py` | Each `make` stage runs end to end on a small sample and prints readable errors |
 
 Why the tests use made-up inputs, and how pytest runs them, is explained in
 `docs/learning-log.md` (M2, "How the tests work").
+
+## How the threshold depends on the error costs
+
+A client is flagged when their calibrated probability of default is above a threshold,
+chosen to give the lowest expected cost on cross-validation folds of train. For the
+chosen setup (LightGBM, sigmoid calibration):
+
+| Cost of a missed defaulter (false alarm = 1) | Rule of thumb 1 / (1 + cost) | Chosen threshold | Expected cost per client |
+|---|---|---|---|
+| 3 | 0.25 | 0.26 | 0.407 |
+| 5 | 0.17 | 0.17 | 0.555 |
+| 10 | 0.09 | 0.09 | 0.718 |
+
+The saved model uses 5:1, the ratio in the documented cost matrix of the Statlog (German
+Credit) dataset. Why, and how the threshold is found, is in `docs/learning-log.md` (M5).
 
 ## Why it is built this way
 

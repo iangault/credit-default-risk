@@ -507,3 +507,134 @@ differences cannot be told apart from fold-to-fold variation.
 - **For M5:** LightGBM with class weights is still the strongest. The features narrow the
   gap to logistic regression from 0.052 to 0.015 ROC-AUC, which matters if an
   easier-to-explain model is wanted. Which one to carry forward is a decision for M5.
+
+---
+
+### M5: Decision layer (2026-10-11)
+
+#### 1. The problem
+
+Every result up to M4 turned scores into yes/no decisions with a 0.5 cutoff. That is
+scikit-learn's default, not a choice. M3 showed the effect: class weights pushed scores
+up, so with the cutoff fixed at 0.5, recall rose and precision fell. M5 replaces the
+fixed cutoff with one chosen from what each kind of mistake costs.
+
+#### 2. Costs, calibration, threshold
+
+**Analogy: a weather forecast and an umbrella.**
+
+| Piece | Weather | Credit |
+|---|---|---|
+| Model score | The forecaster's raw number | LightGBM's output for a client |
+| Calibration | Making "30% rain" true: it rains on about 30% of such days | Making 0.30 mean about 30 in 100 such clients default |
+| Costs | Getting soaked (5) vs carrying an umbrella for nothing (1) | A missed defaulter (5) vs a false alarm on a good client (1) |
+| Threshold | "Take the umbrella above X%" | "Flag the client above X" |
+
+Calibration is about whether the number is honest, costs are a business judgment, and
+the threshold is the rule that combines them.
+
+**The rule of thumb.** For a client with an honest probability p of default, flagging
+costs 1 × (1 - p) (a false alarm if they would have paid) and not flagging costs 5 × p
+(a miss if they default). Flag when 5p > 1 - p, so when p > 1/6, about 0.17. The code
+does not use this formula; it searches for the cheapest cutoff. The formula is a check.
+
+**Why calibrate if the threshold could just move?** For one decision, a threshold on raw
+scores would give the same calls. Calibration adds two things: probabilities that can be
+reported ("an 18% chance of default"), and a threshold that can be explained from the
+costs instead of taken on trust.
+
+**The threshold is not a hyperparameter in the usual sense.** Hyperparameters (tree
+depth, `class_weight`) act during training and need a refit to change. The threshold
+acts on the finished scores, so changing it needs no retraining. It is chosen the same
+honest way: from predictions on rows the model did not train on, never from test.
+
+#### 3. What each wrapper does
+
+`build_decision_model` in `src/credit_risk/decision.py` stacks three layers:
+
+```
+TunedThresholdClassifierCV       outer: picks the cutoff with the lowest expected cost
+  CalibratedClassifierCV         middle: maps scores to real default rates
+    build_pipeline(experiment)   inner: the same pipeline as M2 to M4
+```
+
+What `.fit(X, y)` does, with 5 folds:
+
+1. **Outer:** for each fold, fit the middle layer on the other 4, get calibrated
+   probabilities for the held-out fold, and compute the cost at each of 100 cutoffs.
+   Average over the folds, keep the cheapest cutoff, and refit the middle layer on all
+   rows.
+2. **Middle:** get out-of-fold scores from the inner pipeline (its own 5 folds), fit the
+   mapping from score to default rate on them (sigmoid: a smooth S-curve; isotonic: a
+   staircase that only goes up), then refit the inner pipeline on all its rows.
+3. **Inner:** features (if any), scaling, encoding, model.
+
+The threshold is therefore picked on rows that neither the calibration nor the model saw.
+The inner pipeline is fitted 36 times per setup, which is why `make decide` (18 setups)
+takes about 5 minutes.
+
+Settings worth knowing:
+- **`ensemble=False`:** keep one inner pipeline refit on all rows, rather than five
+  averaged ones. One model keeps M6's SHAP explanations simple.
+- **`greater_is_better=False`** in `cost_scorer`: scikit-learn always picks the highest
+  score, so the cost is negated (-0.55 beats -0.60). Without it, the search would pick
+  the most expensive cutoff with no error. A test checks the sign.
+- **`store_cv_results=True`:** keeps the cost at every cutoff tried, which is what the
+  cost vs threshold plot draws.
+
+#### 4. Results (5-fold CV on train)
+
+Expected cost per client at 5:1 (lower is better):
+
+| Setup | Threshold | Expected cost |
+|---|---|---|
+| lgbm, sigmoid | 0.170 | 0.555 |
+| lgbm, isotonic | 0.162 | 0.557 |
+| lgbm_weighted, sigmoid | 0.176 | 0.560 |
+| lgbm_weighted, isotonic | 0.162 | 0.561 |
+| logreg_weighted_allfeatures, sigmoid | 0.164 | 0.573 |
+| logreg_weighted_allfeatures, isotonic | 0.168 | 0.573 |
+| *Flag nobody* | | 1.106 |
+| *Flag everyone* | | 0.779 |
+
+The chosen setup (lgbm, sigmoid) at each cost ratio:
+
+| Cost of a miss | Rule of thumb | Threshold | Expected cost | Flag everyone |
+|---|---|---|---|---|
+| 3 | 0.25 | 0.26 | 0.407 | 0.779 |
+| 5 | 0.17 | 0.17 | 0.555 | 0.779 |
+| 10 | 0.09 | 0.09 | 0.718 | 0.779 |
+
+Full table: `reports/tables/decision.csv`; curves: `reports/figures/cost_vs_threshold.png`.
+
+#### 5. What it shows, and the choice
+
+- **Calibration worked.** All 18 thresholds land within about 0.04 of the rule of thumb
+  (0.24 to 0.29 at 3:1, 0.16 to 0.18 at 5:1, 0.09 to 0.11 at 10:1).
+- **Class weights add nothing once the threshold is tuned.** Plain `lgbm` is cheapest or
+  tied at every ratio; `lgbm_weighted` is 0.003 to 0.005 higher, close to fold-to-fold
+  variation. The threshold does the job the weights did in M3.
+- **Sigmoid and isotonic are about the same** for LightGBM (within about 0.007).
+- **Logistic regression costs 2% to 3% more** per client at 3:1 and 5:1 (0.008 to 0.018),
+  the price of the easier-to-audit model.
+- **At 10:1 the model adds little.** The best cutoff flags most clients, and the cost
+  (0.718) is not far below flagging everyone (0.779).
+
+**Choice:** `lgbm` with sigmoid calibration, at a 5:1 cost ratio.
+- Setup: lowest cost at 3:1 and 5:1, no class weights needed, and sigmoid is the less
+  flexible method, so less likely to overfit the calibration. SHAP (M6) works well on
+  it: `TreeExplainer` on the 28 original columns.
+- Costs: 5:1 is the ratio in the documented cost matrix of the Statlog (German Credit)
+  dataset, a common reference for credit scoring. `make decide` reports 3:1 and 10:1 so
+  the effect of that choice is visible.
+- Saved by `make train`: threshold 0.170, cross-validated expected cost 0.555 per client.
+
+#### 6. Limitations
+
+- **The reported cost is slightly optimistic.** Each setup's cost is the best of 100
+  cutoffs, scored on the same folds used to pick it. The curves are smooth near their
+  minimum, so the effect should be small. M6's test-set score is the unbiased number.
+- **No fold-to-fold spread.** `TunedThresholdClassifierCV` keeps only the mean cost at
+  each cutoff, so differences under about 0.005 cannot be told apart from noise.
+- **The costs are a judgment, not data.** Real costs depend on balances, recovery rates
+  and client value, which this dataset does not include.

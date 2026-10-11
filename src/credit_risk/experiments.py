@@ -43,6 +43,13 @@ SCORERS = {
 METRICS = tuple(SCORERS)
 
 
+def make_folds(cfg: Config) -> StratifiedKFold:
+    """The cross-validation splitter every stage uses, so all comparisons share folds."""
+    # Stratified: each fold keeps the ~22% default rate. shuffle + random_state: the
+    # rows are mixed before splitting, the same way on every run.
+    return StratifiedKFold(n_splits=cfg.cv_folds, shuffle=True, random_state=cfg.seed)
+
+
 def run_experiments(cfg: Config, train: pd.DataFrame | None = None) -> pd.DataFrame:
     """Cross-validate every experiment in cfg and return one summary row per experiment.
 
@@ -60,9 +67,7 @@ def run_experiments(cfg: Config, train: pd.DataFrame | None = None) -> pd.DataFr
     # Otherwise a typo in the last experiment would only show up after the others
     # had spent minutes training.
     pipelines = {e.name: (e, build_pipeline(e, cfg.seed)) for e in cfg.experiments}
-    # Stratified: each fold keeps the ~22% default rate. shuffle + random_state: the
-    # rows are mixed before splitting, the same way on every run.
-    folds = StratifiedKFold(n_splits=cfg.cv_folds, shuffle=True, random_state=cfg.seed)
+    folds = make_folds(cfg)
 
     rows = []
     for name, (experiment, pipe) in pipelines.items():

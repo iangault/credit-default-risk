@@ -100,6 +100,49 @@ def test_experiments_stage_writes_table(tmp_path, capsys):
     assert "roc_auc" in capsys.readouterr().out
 
 
-def test_makefile_all_includes_experiments():
+def test_makefile_all_includes_every_stage():
     lines = (ROOT / "Makefile").read_text().splitlines()
-    assert "all: data split experiments" in lines
+    assert "all: data split experiments decide train" in lines
+
+
+def shrink_decision(config):
+    """Cut the decision stage down to one small setup so CLI tests run in seconds."""
+    text = config.read_text()
+    for old, new in [
+        ("cv_folds: 5", "cv_folds: 2"),
+        ("candidates: [lgbm, lgbm_weighted, logreg_weighted_allfeatures]", "candidates: [logreg]"),
+        ("calibration: [sigmoid, isotonic]", "calibration: [sigmoid]"),
+        ("false_negative_costs: [3, 5, 10]", "false_negative_costs: [5]"),
+    ]:
+        assert old in text
+        text = text.replace(old, new)
+    config.write_text(text)
+
+
+def test_decide_stage_writes_table_and_plot(tmp_path, capsys):
+    config = make_small_project(tmp_path, n_rows=300)
+    shrink_decision(config)
+    assert main(["--config", str(config), "split"]) == 0
+    assert main(["--config", str(config), "decide"]) == 0
+    table = pd.read_csv(tmp_path / "reports" / "tables" / "decision.csv")
+    assert table["experiment"].tolist() == ["logreg"]
+    assert (tmp_path / "reports" / "figures" / "cost_vs_threshold.png").is_file()
+    assert "threshold" in capsys.readouterr().out
+
+
+def test_train_stage_writes_model(tmp_path, capsys):
+    config = make_small_project(tmp_path, n_rows=300)
+    shrink_decision(config)
+    assert main(["--config", str(config), "split"]) == 0
+    assert main(["--config", str(config), "train"]) == 0
+    assert (tmp_path / "artifacts" / "model.joblib").is_file()
+    assert "Threshold" in capsys.readouterr().out
+
+
+def test_train_before_split_prints_error(tmp_path, capsys):
+    config = make_small_project(tmp_path)
+    code = main(["--config", str(config), "train"])
+    err = capsys.readouterr().err
+    assert code == 1
+    assert "make split" in err
+    assert "Traceback" not in err

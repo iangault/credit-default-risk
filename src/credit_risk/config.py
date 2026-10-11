@@ -47,6 +47,31 @@ class Experiment:
     features: tuple[str, ...] = ()
 
 
+# Calibration methods CalibratedClassifierCV accepts (decision.py). Kept here so the
+# config can reject a typo when it loads, before any fitting.
+CALIBRATION_METHODS = ("sigmoid", "isotonic")
+
+
+@dataclass(frozen=True)
+class Decision:
+    """The `decision` section (M5): what `make decide` compares. Every candidate is
+    tried with every calibration method and every false negative cost.
+    """
+
+    candidates: tuple[str, ...]  # experiment names
+    calibration: tuple[str, ...]  # names from CALIBRATION_METHODS
+    # Costs of a missed defaulter to try; a false alarm stays at costs.false_positive.
+    false_negative_costs: tuple[float, ...]
+
+
+@dataclass(frozen=True)
+class Final:
+    """The `final` section (M5): the one setup `make train` fits and saves."""
+
+    experiment: str
+    calibration: str
+
+
 @dataclass(frozen=True)
 class Config:
     paths: Paths
@@ -57,12 +82,16 @@ class Config:
     costs: Costs
     sample_rows: int | None = None
     experiments: tuple[Experiment, ...] = ()
+    decision: Decision | None = None
+    final: Final | None = None
 
 
 _TOP_REQUIRED = {"paths", "raw_sha256", "seed", "test_size", "cv_folds", "costs"}
-_TOP_OPTIONAL = {"sample_rows", "experiments"}
+_TOP_OPTIONAL = {"sample_rows", "experiments", "decision", "final"}
 _PATH_KEYS = {"raw", "processed_dir", "reports_dir", "artifacts_dir"}
 _COST_KEYS = {"false_negative", "false_positive"}
+_DECISION_KEYS = {"candidates", "calibration", "false_negative_costs"}
+_FINAL_KEYS = {"experiment", "calibration"}
 
 
 def find_project_root(start: Path) -> Path:
@@ -94,6 +123,9 @@ def load_config(path: str | Path) -> Config:
     paths = _section(data, "paths", _PATH_KEYS)
     costs = _section(data, "costs", _COST_KEYS)
     sample_rows = data.get("sample_rows")
+    experiments = _experiments(data["experiments"]) if "experiments" in data else ()
+    # decision and final refer to experiments by name, so check against these names.
+    names = tuple(e.name for e in experiments)
 
     return Config(
         paths=Paths(**{key: root / str(value) for key, value in paths.items()}),
@@ -106,7 +138,9 @@ def load_config(path: str | Path) -> Config:
             false_positive=_positive("costs.false_positive", costs["false_positive"]),
         ),
         sample_rows=None if sample_rows is None else _int("sample_rows", sample_rows, minimum=1),
-        experiments=_experiments(data["experiments"]) if "experiments" in data else (),
+        experiments=experiments,
+        decision=_decision(data, names) if "decision" in data else None,
+        final=_final(data, names) if "final" in data else None,
     )
 
 
@@ -201,6 +235,57 @@ def _experiments(value: Any) -> tuple[Experiment, ...]:
     if duplicates:
         raise ConfigError(f"Duplicate experiment name(s): {duplicates}")
     return tuple(experiments)
+
+
+def _decision(data: dict[str, Any], names: tuple[str, ...]) -> Decision:
+    section = _section(data, "decision", _DECISION_KEYS)
+    costs = section["false_negative_costs"]
+    if not isinstance(costs, list) or not costs:
+        raise ConfigError(
+            f"'decision.false_negative_costs' must be a non-empty list of numbers, got {costs!r}"
+        )
+    false_negative_costs = tuple(_positive("decision.false_negative_costs", c) for c in costs)
+    # A repeated cost would refit the same setups and draw lines on top of each other.
+    _no_repeats("decision.false_negative_costs", false_negative_costs)
+    return Decision(
+        candidates=_names("decision.candidates", section["candidates"], names),
+        calibration=_names("decision.calibration", section["calibration"], CALIBRATION_METHODS),
+        false_negative_costs=false_negative_costs,
+    )
+
+
+def _final(data: dict[str, Any], names: tuple[str, ...]) -> Final:
+    section = _section(data, "final", _FINAL_KEYS)
+    return Final(
+        experiment=_name("final.experiment", section["experiment"], names),
+        calibration=_name("final.calibration", section["calibration"], CALIBRATION_METHODS),
+    )
+
+
+def _name(key: str, value: Any, valid: tuple[str, ...]) -> str:
+    """Check that value is one of the valid names (an experiment or calibration method)."""
+    if not valid:
+        # Only experiment names can be empty: a config with decision or final but no
+        # experiments list. Without this, the message below would read "one of ; got".
+        raise ConfigError(f"'{key}' names an experiment, but no experiments are defined")
+    if not isinstance(value, str) or value not in valid:
+        raise ConfigError(f"'{key}' must be one of {', '.join(valid)}; got {value!r}")
+    return value
+
+
+def _names(key: str, value: Any, valid: tuple[str, ...]) -> tuple[str, ...]:
+    """Check that value is a non-empty list of valid names."""
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"'{key}' must be a non-empty list of names, got {value!r}")
+    names = tuple(_name(key, item, valid) for item in value)
+    _no_repeats(key, names)  # a repeat would refit the same setup for nothing
+    return names
+
+
+def _no_repeats(key: str, values: tuple[Any, ...]) -> None:
+    repeated = sorted({str(v) for v in values if values.count(v) > 1})
+    if repeated:
+        raise ConfigError(f"'{key}' lists {repeated} more than once")
 
 
 def _is_number(value: Any) -> bool:
