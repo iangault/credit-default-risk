@@ -654,8 +654,10 @@ optimistic.
 The spec rule, reworded in M6: the test set is read only by `evaluate` and `explain`;
 neither changes the model, and no setting is changed after seeing their output. That makes
 it a process commitment: a disappointing result is reported, not tuned away. A safeguard
-supports it: `make train` records its settings in `artifacts/model.json`, and `evaluate`
-and `explain` refuse a model trained under different settings.
+supports it: `make train` records its settings in `artifacts/model.json` (the final
+experiment's full definition, calibration, costs, folds, and split settings), and
+`evaluate` and `explain` refuse a model trained under different settings. Recording the
+split settings matters most: a new split could put rows the model trained on into test.
 
 #### 2. Results on the test set (1,327 of 6,000 clients defaulted, 22.1%)
 
@@ -694,7 +696,7 @@ share each. SHAP does the same for columns: each column's share of one client's 
 averaged over every order in which the columns could be added.
 
 - **Additivity:** base value (the average score) + the client's SHAP values = the client's
-  score. A test checks this to 1e-14.
+  score. A test checks that the two sides add up.
 - **Units:** log-odds of the LightGBM score before calibration. +0.7 multiplies the odds of
   default by about 2. Sigmoid calibration keeps the order of clients, so "pushes risk up"
   means the same after calibration.
@@ -726,12 +728,12 @@ probability):
   (PAY_1 = -1 pulls risk down), but was 2 months late in each of the two months before and
   paid nothing in four of the last months. The model added these up correctly.
 - **Missed defaulter, client 3448 (probability 0.12).** "Paid duly" in every month shown,
-  a 150,000 limit, and a 34,672 payment six months ago. Nothing in these columns looked
-  risky. Some defaults have no warning sign in this data, and a threshold low enough to
+  a 150,000 limit, and a 34,672 payment six months ago. Only the bill amounts pushed risk
+  up (+0.20 and +0.09), and not by enough. Some defaults have no warning sign in this data, and a threshold low enough to
   catch them would flag many more good clients.
 
 **Demographics, for M7:** `SEX_2` (female) ranks 10th of 28 and nudges scores down
-slightly. `MARRIAGE_1` ranks 21st, `AGE` 22nd, and `EDUCATION_4` 23rd. The model uses
+slightly. `MARRIAGE_1` ranks 20th, `AGE` 21st, and `EDUCATION_4` 22nd. The model uses
 these columns; whether it should is the fairness question M7 takes up.
 
 #### 6. Limitations

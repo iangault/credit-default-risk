@@ -133,6 +133,7 @@ def test_run_decision_has_one_row_per_combination(sample, tmp_path):
         "experiment",
         "calibration",
         "false_negative_cost",
+        "false_positive_cost",
         "threshold",
         "expected_cost",
     ]
@@ -209,7 +210,8 @@ def test_save_model_records_its_settings(sample, tmp_path):
     save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
     saved = json.loads(model_settings_path(cfg).read_text())
     assert saved == model_settings(cfg)
-    assert saved["experiment"] == "logreg"
+    assert saved["experiment"]["name"] == "logreg"
+    assert saved["test_size"] == cfg.test_size
     assert saved["false_negative"] == cfg.costs.false_negative
 
 
@@ -222,10 +224,31 @@ def test_load_model_refuses_a_model_from_other_settings(sample, tmp_path):
         load_model(changed)
 
 
+def test_load_model_refuses_a_model_whose_experiment_changed(sample, tmp_path):
+    # Editing the final experiment's definition (here its params) after make train.
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
+    experiments = tuple(
+        replace(e, params={"C": 0.5}) if e.name == "logreg" else e for e in cfg.experiments
+    )
+    with pytest.raises(DataFileError, match="make train"):
+        load_model(replace(cfg, experiments=experiments))
+
+
+def test_load_model_refuses_a_model_from_another_split(sample, tmp_path):
+    # A different test_size means a different split: test rows may have been trained on.
+    X, y = sample
+    cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
+    save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
+    with pytest.raises(DataFileError, match="make train"):
+        load_model(replace(cfg, test_size=0.3))
+
+
 def test_load_model_refuses_a_model_without_settings(sample, tmp_path):
     X, y = sample
     cfg = small_cfg(tmp_path, final=Final("logreg", "sigmoid"))
     save_model(train_final(cfg, X.assign(**{TARGET: y})), cfg)
     model_settings_path(cfg).unlink()
-    with pytest.raises(DataFileError, match="make train"):
+    with pytest.raises(DataFileError, match="no settings record"):
         load_model(cfg)

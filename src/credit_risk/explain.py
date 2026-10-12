@@ -11,7 +11,8 @@ exactly and fast.
 Units: SHAP explains the model step inside the saved pipeline, so values are in that
 model's score before calibration: log-odds for LightGBM and XGBoost (a value of +0.7
 multiplies the odds of default by about 2), probability for random forest. Sigmoid
-calibration keeps the order of clients, so "pushes risk up" means the same either way.
+calibration keeps the order of clients, so "pushes risk up" means the same either way
+(isotonic calibration keeps the order too, but can merge nearby scores into ties).
 
 Plots (reports/figures/):
 - shap_summary.png (beeswarm): one row per column, most important at the top; one dot
@@ -23,7 +24,8 @@ Plots (reports/figures/):
 
 The model sees transformed columns (scaled amounts, one-hot categories). The plots show
 each column's original value where the column keeps its name (LIMIT_BAL = 50000, not
--0.9); one-hot columns such as SEX_2 show 0 or 1.
+-0.9); one-hot columns such as SEX_2 show 0 or 1. Engineered columns from features.py
+(e.g. months_late) are not in the raw data, so they show their scaled values.
 """
 
 from __future__ import annotations

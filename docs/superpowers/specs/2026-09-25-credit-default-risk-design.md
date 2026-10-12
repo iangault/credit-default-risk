@@ -176,8 +176,10 @@ Stage details:
   flagged defaulter and the missed defaulter nearest their group's
   median probability.
 - **Stale model check (M6):** `make train` also writes
-  `artifacts/model.json` (final setup, costs, seed); `evaluate` and
-  `explain` stop with a message if it does not match the config.
+  `artifacts/model.json` (the final experiment's full definition,
+  calibration, costs, CV folds, seed, test_size, sample_rows);
+  `evaluate` and `explain` stop with a message if it does not match
+  the config.
 
 ## Modules
 

@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 
 import altair as alt
@@ -142,6 +143,9 @@ def run_decision(
                     "experiment": name,
                     "calibration": method,
                     "false_negative_cost": false_negative_cost,
+                    # Recorded so a later change to costs.false_positive can be detected
+                    # (evaluate.train_estimate matches on both costs).
+                    "false_positive_cost": cfg.costs.false_positive,
                 }
                 # The scorer reports costs negated (see cost_scorer), so flip them back.
                 # best_score_ is the cheapest cutoff's cost averaged over the folds. It is
@@ -257,18 +261,27 @@ def model_settings(cfg: Config) -> dict:
     """The config settings that determine the saved model.
 
     make train writes these next to the model; load_model compares them with the current
-    config, so a model trained before `final` or `costs` changed is not used by mistake.
+    config, so a model is not used after anything that shaped it has changed: the final
+    experiment's full definition (model, params, sampler, features), the calibration, the
+    costs, the folds, and the split settings (seed, test_size, sample_rows). The split
+    settings matter most: a new split could put rows the model trained on into test.
     """
     if cfg.final is None:
         raise ConfigError("No 'final' section in the config; set it and run `make train`.")
-    return {
-        "experiment": cfg.final.experiment,
+    experiment = {e.name: e for e in cfg.experiments}[cfg.final.experiment]
+    settings = {
+        "experiment": asdict(experiment),
         "calibration": cfg.final.calibration,
         "false_negative": cfg.costs.false_negative,
         "false_positive": cfg.costs.false_positive,
         "seed": cfg.seed,
         "cv_folds": cfg.cv_folds,
+        "test_size": cfg.test_size,
+        "sample_rows": cfg.sample_rows,
     }
+    # Round trip through JSON so tuples become lists, as they are when read back from
+    # model.json; otherwise ("a",) and ["a"] would compare as different.
+    return json.loads(json.dumps(settings))
 
 
 def save_model(model: TunedThresholdClassifierCV, cfg: Config) -> Path:
@@ -289,7 +302,12 @@ def load_model(cfg: Config) -> TunedThresholdClassifierCV:
     if not path.is_file():
         raise DataFileError(f"{path} not found. Run `make train` first.")
     settings_path = model_settings_path(cfg)
-    saved = json.loads(settings_path.read_text()) if settings_path.is_file() else None
+    if not settings_path.is_file():
+        # e.g. a model saved before M6, when make train did not write this record yet.
+        raise DataFileError(
+            f"{settings_path} not found: the model has no settings record. Run `make train` again."
+        )
+    saved = json.loads(settings_path.read_text())
     if saved != model_settings(cfg):
         raise DataFileError(
             f"{path} was trained with different settings ({saved}) than the config "

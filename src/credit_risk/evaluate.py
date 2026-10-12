@@ -83,12 +83,13 @@ def train_estimate(cfg: Config) -> dict:
     """The train cross-validation numbers for the chosen setup, from the committed tables.
 
     ROC-AUC and PR-AUC come from experiments.csv (the uncalibrated model; sigmoid
-    calibration keeps the order of clients, so ranking metrics match). Threshold and cost
+    calibration keeps the order of clients, so ranking metrics match; isotonic can merge
+    nearby scores into ties, so they may differ slightly). Threshold and cost
     come from decision.csv. A value not found (no table yet, or costs changed without
     rerunning make decide) is NaN, so the row shows blanks instead of failing.
     """
     estimate = dict.fromkeys(["threshold", "roc_auc", "pr_auc", "expected_cost"], np.nan)
-    final, fn_cost = cfg.final, cfg.costs.false_negative
+    final, costs = cfg.final, cfg.costs
     if experiments_table_path(cfg).is_file():
         experiments = pd.read_csv(experiments_table_path(cfg))
         match = experiments[experiments["experiment"] == final.experiment]
@@ -100,7 +101,8 @@ def train_estimate(cfg: Config) -> dict:
         match = decision[
             (decision["experiment"] == final.experiment)
             & (decision["calibration"] == final.calibration)
-            & np.isclose(decision["false_negative_cost"], fn_cost)
+            & np.isclose(decision["false_negative_cost"], costs.false_negative)
+            & np.isclose(decision["false_positive_cost"], costs.false_positive)
         ]
         if len(match) == 1:
             estimate["threshold"] = float(match["threshold"].iloc[0])

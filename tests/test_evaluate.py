@@ -70,6 +70,7 @@ def write_tables(cfg):
             "experiment": ["logreg", "logreg"],
             "calibration": ["sigmoid", "sigmoid"],
             "false_negative_cost": [5.0, 3.0],
+            "false_positive_cost": [1.0, 1.0],
             "threshold": [0.17, 0.25],
             "expected_cost": [0.57, 0.41],
         }
@@ -85,6 +86,13 @@ def test_train_estimate_reads_the_chosen_setup(tmp_path):
         "pr_auc": 0.50,
         "expected_cost": 0.57,
     }
+
+
+def test_train_estimate_is_blank_when_the_false_alarm_cost_changed(tmp_path):
+    cfg = small_cfg(tmp_path, costs=Costs(false_negative=5.0, false_positive=2.0))
+    write_tables(cfg)
+    estimate = train_estimate(cfg)
+    assert math.isnan(estimate["threshold"]) and math.isnan(estimate["expected_cost"])
 
 
 def test_train_estimate_is_blank_when_tables_lack_the_setup(tmp_path):
