@@ -97,3 +97,32 @@ def test_client_above_the_limit_range_renders(app):
     assert not app.exception
     assert app.slider(key="limit").value == limit
     assert app.slider(key="limit").max == limit
+
+
+def test_examples_say_which_cutoff_grouped_them(app):
+    # The examples are grouped at the saved 5x cutoff; at other ratios the decision shown
+    # can differ from the group name, so the app says so next to the buttons.
+    app.slider(key="ratio").set_value(20).run()
+    app.button(key="example_cleared").click().run()
+    assert any("grouped at the saved model's cutoff" in c.value for c in app.caption)
+
+
+def test_unexpected_startup_error_shows_a_message(monkeypatch):
+    # e.g. the host cannot unpickle the model: the visitor sees a short message, not a
+    # traceback. The cached assets from other tests are cleared so the failure is reached.
+    import streamlit as st
+
+    from credit_risk import showcase
+
+    def broken(cfg):
+        raise RuntimeError("cannot load model")
+
+    monkeypatch.setattr(showcase, "load_assets", broken)
+    st.cache_resource.clear()
+    try:
+        at = AppTest.from_file(APP, default_timeout=120)
+        at.run()
+        assert not at.exception
+        assert "could not start" in at.error[0].value
+    finally:
+        st.cache_resource.clear()  # later tests load the real assets again

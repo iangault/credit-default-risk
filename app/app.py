@@ -43,7 +43,14 @@ def get_assets() -> sc.Assets:
 try:
     assets = get_assets()
 except (ConfigError, DataFileError) as error:
+    # The expected failures (model missing or stale, raw CSV changed) have clear messages.
     st.error(f"The app could not start: {error}")
+    st.stop()
+except Exception as error:
+    # Anything else, e.g. the host cannot load the model with its library versions. A
+    # visitor sees a short message instead of a traceback; the host's log keeps the details.
+    print(f"Startup failed: {error!r}", file=sys.stderr)
+    st.error("The app could not start because of an unexpected error. Please try again later.")
     st.stop()
 
 
@@ -132,6 +139,10 @@ with client_tab:
                 st.button(label, key=f"example_{key}", on_click=show_example, args=(key,))
         st.button("A random test client", key="random", on_click=show_random)
         st.caption(f"Showing: {st.session_state.shown} (test client ID {int(row['ID'].iloc[0])})")
+        st.caption(
+            f"Examples are grouped at the saved model's cutoff ({assets.saved_cutoff:.1%}, "
+            "the 5x ratio). At other ratios the decision shown can differ from the group name."
+        )
 
         st.subheader("Change a few things")
         st.selectbox("Payment behavior", sc.SCENARIOS, key="scenario")
