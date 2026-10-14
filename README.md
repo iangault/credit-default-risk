@@ -48,6 +48,7 @@ make setup                # create the conda env from environment.yml, install g
 conda activate credit-risk
 make test                 # run the test suite
 make all                  # run the pipeline end to end
+make app                  # run the Streamlit app locally (uses the committed model)
 ```
 
 Each stage can also be run on its own (`make data`, `make split`, ...). Use a different
