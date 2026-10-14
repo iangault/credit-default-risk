@@ -3,8 +3,7 @@
 Predicting whether a credit card client will miss next month's payment, built as a
 modular, reproducible ML pipeline.
 
-> Status: work in progress. The project scaffold is in place; modelling stages are
-> being added milestone by milestone (see the [design spec](docs/superpowers/specs/2026-09-25-credit-default-risk-design.md)).
+Results: [summary below](#results), full walkthrough in [docs/results.md](docs/results.md).
 
 ## The problem
 
@@ -13,6 +12,32 @@ dataset has 30,000 clients from Taiwan (2005) with credit limit, demographics, s
 of repayment status, bill amounts, and payment amounts. About 22% of clients default.
 The goal is to rank clients by default risk and choose a decision threshold based on the
 cost of each type of error, rather than the default 0.5 cutoff.
+
+## Results
+
+The model flags a client when their probability of default is above a cutoff. The
+cutoff comes from the cost of each mistake rather than the usual 0.5: a missed defaulter
+is assumed to cost 5 times a false alarm, which puts the cutoff at about 0.17.
+
+On 6,000 held-out clients, read once at the end:
+
+| | Cutoff 0.17 (cost-based) | Cutoff 0.5 (default) | Flag everyone |
+|---|---|---|---|
+| Defaulters caught (of 1,327) | 1,016 (77%) | 472 (36%) | 1,327 |
+| False alarms (of 4,673 who paid) | 1,650 (35%) | 229 (5%) | 4,673 |
+| Cost per client (miss = 5, false alarm = 1) | **0.534** | 0.751 | 0.779 |
+
+- Choosing the cutoff from the costs lowers the cost per client by 29%, with the same
+  model. Catching more defaulters means flagging more clients who would have paid.
+- Ranking quality (ROC-AUC 0.788) is in the range published for this dataset. Class
+  weights, resampling and engineered features each changed it by about 0.01 or less.
+- Last month's repayment status drives predictions more than any other column. Sex,
+  marital status and age are used too, which is a fairness concern.
+
+![Cost per client at each cutoff, for three cost ratios](reports/figures/cost_vs_threshold.png)
+
+The full walkthrough, with all the figures, limitations and the fairness note, is in
+**[docs/results.md](docs/results.md)**.
 
 ## Quickstart
 
@@ -35,8 +60,8 @@ configs/          settings for every stage (paths, seed, CV folds, error costs)
 data/raw/         the original CSV (committed; checked by sha256)
 src/credit_risk/  the package: one module per pipeline responsibility
 tests/            pytest suite, including a small end-to-end smoke run
-notebooks/        exploration and write-up; imports from the package
-docs/             design spec, plans, and a learning log
+notebooks/        exploration; imports from the package
+docs/             results write-up, design spec, plans, and a learning log
 ```
 
 ## How the code fits together
@@ -76,7 +101,7 @@ for the list of targets.
 | Which setup was chosen, and why? | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png`, and the M5 learning log entry |
 | How well does the final model do on unseen clients? | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png` |
 | What drives the model's predictions? | `reports/figures/shap_summary.png`, `reports/tables/shap_importance.csv`, and the two `shap_client_*.png` figures |
-| What were the results? | `reports/tables/experiments.csv` |
+| What were the results? | `docs/results.md`; the cross-validation comparison is in `reports/tables/experiments.csv` |
 | What does the data look like? | `notebooks/01-eda.ipynb` |
 | What is a given function supposed to do? | Its test in `tests/test_<module>.py` |
 | Why was a decision made? | `docs/learning-log.md` and the design spec |
@@ -106,24 +131,6 @@ with a known right answer, often a small made-up one, and checks the result.
 
 Why the tests use made-up inputs, and how pytest runs them, is explained in
 `docs/learning-log.md` (M2, "How the tests work").
-
-## How the threshold depends on the error costs
-
-A client is flagged when their calibrated probability of default is above a threshold,
-chosen to give the lowest expected cost on cross-validation folds of train. For the
-chosen setup (LightGBM, sigmoid calibration):
-
-| Cost of a missed defaulter (false alarm = 1) | Rule of thumb 1 / (1 + cost) | Chosen threshold | Expected cost per client |
-|---|---|---|---|
-| 3 | 0.25 | 0.26 | 0.407 |
-| 5 | 0.17 | 0.17 | 0.555 |
-| 10 | 0.09 | 0.09 | 0.718 |
-
-The saved model uses 5:1, the ratio in the documented cost matrix of the Statlog (German
-Credit) dataset. Why, and how the threshold is found, is in `docs/learning-log.md` (M5).
-On the held-out test set (6,000 clients, read once), the saved model's cost was 0.534 per
-client, against 0.555 estimated on train and 0.751 for the same model at a 0.5 cutoff
-(`reports/tables/test_metrics.csv`).
 
 ## Why it is built this way
 
