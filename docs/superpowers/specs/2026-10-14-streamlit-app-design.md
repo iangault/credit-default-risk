@@ -196,7 +196,7 @@ and nothing else is shown from them.
 | `top_contributions(model, row, n=8)` | DataFrame of plain label, SHAP value, direction; the n largest by size. |
 | `PLAIN_LABELS` | Model column name to plain words, for all 28 model columns. |
 | `describe_client(row)` | Plain-word summary table for one client. |
-| `test_outcomes(y, proba, ratio)` | The three-column comparison for the cost tab. |
+| `outcomes_at_ratio(y, proba, ratio)` | The three-column comparison for the cost tab. |
 
 Reused: `load_model`, `verify_raw`, `load_raw`, `clean`, `split`,
 `decision_metrics`, `plot_tradeoff_curves`, `shap_explanation`. The median
@@ -248,7 +248,7 @@ the repo root.
 - `score_client` matches `predict_proba`.
 - `top_contributions` returns n rows with plain labels; `PLAIN_LABELS` covers
   every model column.
-- `test_outcomes` matches `decision_metrics`.
+- `outcomes_at_ratio` matches `decision_metrics`.
 
 `tests/test_app.py`, with Streamlit's `AppTest` on the committed model and
 data:
