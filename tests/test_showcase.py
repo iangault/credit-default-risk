@@ -4,9 +4,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from credit_risk.config import Final, load_config
+from credit_risk.config import Costs, Final, load_config
 from credit_risk.data import TARGET, clean, load_raw
 from credit_risk.decision import train_final
+from credit_risk.evaluate import decision_metrics
 from credit_risk.explain import inner_pipeline, nearest_to_median
 from credit_risk.showcase import (
     EXAMPLE_LABELS,
@@ -20,8 +21,12 @@ from credit_risk.showcase import (
     example_clients,
     is_edited,
     is_flagged,
+    outcomes_at_ratio,
     payment_history,
+    plot_contributions,
+    score_client,
     status_label,
+    top_contributions,
     widen,
 )
 
@@ -211,3 +216,42 @@ def test_edit_client_sets_the_limit_and_demographics(row):
 def test_edit_client_refuses_other_columns(row):
     with pytest.raises(ValueError, match="BILL_AMT1"):
         edit_client(row, "As recorded", 50000, {"BILL_AMT1": 0})
+
+
+def test_score_client_matches_predict_proba(model, row):
+    assert score_client(model, row) == pytest.approx(model.predict_proba(row)[0, 1])
+
+
+def test_top_contributions_are_the_largest_in_plain_words(model, row):
+    table = top_contributions(model, row, n=8)
+    assert len(table) == 8
+    assert table["label"].notna().all()
+    sizes = table["shap"].abs().to_numpy()
+    assert (np.diff(sizes) <= 0).all()  # largest first
+    raises = table["shap"] > 0
+    assert (table.loc[raises, "direction"] == "Raises risk").all()
+    assert (table.loc[~raises, "direction"] == "Lowers risk").all()
+
+
+def test_plot_contributions_is_a_bar_chart(model, row):
+    spec = plot_contributions(top_contributions(model, row)).to_dict()
+    assert spec["mark"]["type"] == "bar"
+
+
+def test_outcomes_at_ratio_match_decision_metrics():
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 400)
+    y = (rng.uniform(0, 1, 400) < proba).astype(int)
+    table = outcomes_at_ratio(y, proba, ratio=4).set_index("setup")
+    assert table.index.tolist() == ["This cutoff", "Cutoff 0.5", "Flag nobody"]
+    costs = Costs(false_negative=4.0, false_positive=1.0)
+    expected = decision_metrics(y, proba, 0.2, costs)
+    assert table.loc["This cutoff", "cutoff"] == pytest.approx(0.2)
+    assert table.loc["This cutoff", "caught"] == expected["caught"]
+    assert table.loc["This cutoff", "cost_per_client"] == pytest.approx(expected["expected_cost"])
+    assert table.loc["Cutoff 0.5", "cutoff"] == 0.5
+    nobody = table.loc["Flag nobody"]
+    assert np.isnan(nobody["cutoff"])
+    assert (nobody["caught"], nobody["false_alarms"]) == (0, 0)
+    assert nobody["missed"] == y.sum()
+    assert nobody["cost_per_client"] == pytest.approx(4.0 * y.mean())

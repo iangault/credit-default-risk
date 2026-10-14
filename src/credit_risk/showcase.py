@@ -26,11 +26,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import altair as alt
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import TunedThresholdClassifierCV
 
+from credit_risk.config import Costs
 from credit_risk.data import BILL_AMTS, PAY_AMTS, PAY_STATUS
-from credit_risk.explain import nearest_to_median
+from credit_risk.evaluate import decision_metrics
+from credit_risk.explain import nearest_to_median, shap_explanation
 
 # The data's six months, newest first: column 1 (PAY_1, BILL_AMT1, PAY_AMT1) is
 # September 2005 and column 6 is April 2005.
@@ -206,3 +210,72 @@ def payment_history(row: pd.DataFrame) -> pd.DataFrame:
             "Payment (NT$)": [f"{client[c]:,.0f}" for c in PAY_AMTS],
         }
     )
+
+
+def score_client(model: TunedThresholdClassifierCV, row: pd.DataFrame) -> float:
+    """Calibrated probability of default for one client (the full saved pipeline)."""
+    return float(model.predict_proba(row)[0, 1])
+
+
+def top_contributions(
+    model: TunedThresholdClassifierCV, row: pd.DataFrame, n: int = 8
+) -> pd.DataFrame:
+    """The `n` model columns that moved this client's score most, in plain words.
+
+    Values are SHAP values (see explain.py): log-odds for LightGBM, before calibration.
+    Positive pushes toward default. Sorted by size, largest first.
+    """
+    explanation = shap_explanation(model, row)
+    table = pd.DataFrame({"feature": explanation.feature_names, "shap": explanation.values[0]})
+    table["label"] = table["feature"].map(PLAIN_LABELS)
+    table["direction"] = np.where(table["shap"] > 0, "Raises risk", "Lowers risk")
+    order = table["shap"].abs().sort_values(ascending=False).index
+    return table.loc[order].head(n).reset_index(drop=True)
+
+
+def plot_contributions(table: pd.DataFrame) -> alt.Chart:
+    """Horizontal bars from top_contributions: right raises risk, left lowers it."""
+    return (
+        alt.Chart(table)
+        .mark_bar()
+        .encode(
+            x=alt.X("shap:Q", title="Effect on the model's score (right: toward default)"),
+            # sort=None keeps the table's order (largest effect at the top).
+            y=alt.Y("label:N", sort=None, title=None),
+            color=alt.Color(
+                "direction:N",
+                scale=alt.Scale(
+                    domain=["Raises risk", "Lowers risk"], range=["#c0392b", "#2e86c1"]
+                ),
+                title=None,
+            ),
+            tooltip=["label:N", alt.Tooltip("shap:Q", format=".2f")],
+        )
+        .properties(title="What moved this client's score most")
+    )
+
+
+def outcomes_at_ratio(y: Sequence[int], proba: Sequence[float], ratio: float) -> pd.DataFrame:
+    """Counts and cost per client on the test clients at three settings, for one ratio.
+
+    This cutoff (1 / (1 + ratio)), the default 0.5, and flag nobody. Cost per client
+    uses the same ratio for all three (a miss costs `ratio`, a false alarm 1), so the
+    rows can be compared. Flag nobody uses an infinite cutoff, which flags no one.
+    Not named test_*: pytest would collect it as a test when a test file imports it.
+    """
+    costs = Costs(false_negative=float(ratio), false_positive=1.0)
+    settings = {"This cutoff": cutoff_for(ratio), "Cutoff 0.5": 0.5, "Flag nobody": np.inf}
+    rows = []
+    for setup, cutoff in settings.items():
+        metrics = decision_metrics(y, proba, cutoff, costs)
+        rows.append(
+            {
+                "setup": setup,
+                "cutoff": cutoff if np.isfinite(cutoff) else np.nan,
+                "caught": metrics["caught"],
+                "missed": metrics["missed"],
+                "false_alarms": metrics["false_alarms"],
+                "cost_per_client": metrics["expected_cost"],
+            }
+        )
+    return pd.DataFrame(rows)
