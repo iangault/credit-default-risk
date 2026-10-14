@@ -8,6 +8,16 @@ all test clients. This module has no Streamlit code; app.py only lays things out
 Nothing here changes the model or chooses a setting. Like make evaluate, the app scores
 the test clients once and then counts them at different cutoffs.
 
+Payment behavior scenarios rewrite all six months together, so an edited client stays
+plausible instead of, say, "paid in full" this month with every earlier month late. The
+rules use patterns measured on the training clients (2026-10-14):
+- 80% of clients who paid in full paid at least the previous month's bill;
+- clients paying the minimum paid a median 6% of the previous bill;
+- clients 2 months late in both of the last two months paid a median of about 4%, and
+  "2 then 2" is the most common history for clients 2 months late now.
+Bills stay as recorded. Credit limit and demographics change alone, since no other
+column depends on them.
+
 A "row" is a one-row DataFrame with the cleaned columns minus the target (ID included),
 the shape model.predict_proba takes.
 """
@@ -56,6 +66,16 @@ EXAMPLE_LABELS = {
     "cleared": "A low-risk client, correctly cleared",
 }
 
+# Payment behavior options, in the order the app lists them.
+SCENARIOS = (
+    "As recorded",
+    "Pays in full every month",
+    "Pays the minimum every month",
+    "Fell 2 months behind",
+)
+MIN_PAYMENT_SHARE = 0.06  # median minimum payment, as a share of the previous bill
+LATE_PAYMENT_SHARE = 0.04  # median payment of clients 2 months late, same basis
+
 
 def status_label(code: int) -> str:
     """Plain words for a repayment status code (PAY_1 to PAY_6)."""
@@ -84,6 +104,58 @@ def is_flagged(proba: float, cutoff: float) -> bool:
 def widen(low: int, high: int, value: int) -> tuple[int, int]:
     """A slider range that also includes `value`, e.g. a client above the usual range."""
     return min(low, value), max(high, value)
+
+
+def _share_of_previous_bill(out: pd.DataFrame, month: int, share: float) -> pd.Series:
+    """`share` of the bill a payment in column `month` (0-based) pays: the next column's.
+
+    A payment in September pays the August statement, which is the next column (data
+    columns run newest first). A negative bill (a credit) gives 0, never a negative
+    payment.
+    """
+    return (share * out[BILL_AMTS[month + 1]].clip(lower=0)).round()
+
+
+def apply_scenario(row: pd.DataFrame, scenario: str) -> pd.DataFrame:
+    """A copy of `row` with one of SCENARIOS applied (see the module docstring)."""
+    if scenario not in SCENARIOS:
+        raise ValueError(f"Unknown scenario {scenario!r}; expected one of {SCENARIOS}.")
+    out = row.copy()  # never change the caller's row
+    if scenario == "Pays in full every month":
+        out[PAY_STATUS] = -1
+        for month in range(5):  # the oldest payment's bill is not in the data; keep it
+            out[PAY_AMTS[month]] = _share_of_previous_bill(out, month, 1.0)
+    elif scenario == "Pays the minimum every month":
+        out[PAY_STATUS] = 0
+        for month in range(5):
+            out[PAY_AMTS[month]] = _share_of_previous_bill(out, month, MIN_PAYMENT_SHARE)
+    elif scenario == "Fell 2 months behind":
+        out[PAY_STATUS[:2]] = 2
+        for month in range(2):
+            out[PAY_AMTS[month]] = _share_of_previous_bill(out, month, LATE_PAYMENT_SHARE)
+    return out
+
+
+def edit_client(
+    row: pd.DataFrame, scenario: str, limit: float, demographics: dict[str, int]
+) -> pd.DataFrame:
+    """A copy of `row` with a scenario, a credit limit and demographic values applied.
+
+    `demographics` maps any of DEMOGRAPHICS to a new value; columns left out keep theirs.
+    """
+    unknown = set(demographics) - set(DEMOGRAPHICS)
+    if unknown:
+        raise ValueError(f"Only {DEMOGRAPHICS} can be changed, not {sorted(unknown)}.")
+    out = apply_scenario(row, scenario)
+    out["LIMIT_BAL"] = float(limit)  # LIMIT_BAL is stored as a float in the cleaned data
+    for column, value in demographics.items():
+        out[column] = value
+    return out
+
+
+def is_edited(original: pd.DataFrame, edited: pd.DataFrame) -> bool:
+    """Whether any value differs, comparing numbers (so 50000 and 50000.0 match)."""
+    return not np.allclose(original.to_numpy(dtype=float), edited.to_numpy(dtype=float))
 
 
 def example_clients(y: Sequence[int], proba: Sequence[float], threshold: float) -> dict[str, int]:

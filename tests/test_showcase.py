@@ -12,9 +12,13 @@ from credit_risk.showcase import (
     EXAMPLE_LABELS,
     MONTHS,
     PLAIN_LABELS,
+    SCENARIOS,
+    apply_scenario,
     cutoff_for,
     describe_client,
+    edit_client,
     example_clients,
+    is_edited,
     is_flagged,
     payment_history,
     status_label,
@@ -130,3 +134,80 @@ def test_plain_labels_cover_every_model_column(model, clients):
     _, test = clients
     columns = inner_pipeline(model)[:-1].transform(test.head(2)).columns
     assert set(columns) == set(PLAIN_LABELS)
+
+
+STATUS = [f"PAY_{i}" for i in range(1, 7)]
+PAID = [f"PAY_AMT{i}" for i in range(1, 7)]
+BILLS = [f"BILL_AMT{i}" for i in range(1, 7)]
+
+
+def values(frame, columns):
+    return frame[columns].iloc[0].tolist()
+
+
+def test_scenario_names():
+    assert SCENARIOS == (
+        "As recorded",
+        "Pays in full every month",
+        "Pays the minimum every month",
+        "Fell 2 months behind",
+    )
+
+
+def test_as_recorded_changes_nothing(row):
+    assert apply_scenario(row, "As recorded").equals(row)
+
+
+def test_pays_in_full(row):
+    # Each month pays the previous month's bill; the -500 bill (credit) gives 0, not -500.
+    out = apply_scenario(row, "Pays in full every month")
+    assert values(out, STATUS) == [-1] * 6
+    assert values(out, PAID) == [2000, 0, 4000, 5000, 6000, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_pays_the_minimum(row):
+    out = apply_scenario(row, "Pays the minimum every month")
+    assert values(out, STATUS) == [0] * 6
+    assert values(out, PAID) == [120, 0, 240, 300, 360, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_fell_two_months_behind(row):
+    out = apply_scenario(row, "Fell 2 months behind")
+    assert values(out, STATUS) == [2, 2, 1, 1, 1, 1]
+    assert values(out, PAID) == [80, 0, 13, 14, 15, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_scenarios_leave_the_input_row_unchanged(row):
+    before = row.copy()
+    for scenario in SCENARIOS:
+        apply_scenario(row, scenario)
+    assert row.equals(before)
+
+
+def test_unknown_scenario_is_refused(row):
+    with pytest.raises(ValueError, match="Unknown scenario"):
+        apply_scenario(row, "Pays twice")
+
+
+def test_edit_client_with_the_recorded_values_is_not_an_edit(row):
+    same = {c: int(row[c].iloc[0]) for c in ("SEX", "EDUCATION", "MARRIAGE", "AGE")}
+    edited = edit_client(row, "As recorded", float(row["LIMIT_BAL"].iloc[0]), same)
+    assert not is_edited(row, edited)
+
+
+def test_edit_client_sets_the_limit_and_demographics(row):
+    edited = edit_client(
+        row, "Pays in full every month", 120000, {"SEX": 1, "EDUCATION": 3, "AGE": 45}
+    )
+    assert edited["LIMIT_BAL"].iloc[0] == 120000
+    assert values(edited, ["SEX", "EDUCATION", "MARRIAGE", "AGE"]) == [1, 3, 1, 45]
+    assert values(edited, STATUS) == [-1] * 6
+    assert is_edited(row, edited)
+
+
+def test_edit_client_refuses_other_columns(row):
+    with pytest.raises(ValueError, match="BILL_AMT1"):
+        edit_client(row, "As recorded", 50000, {"BILL_AMT1": 0})
