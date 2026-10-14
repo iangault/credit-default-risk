@@ -1,0 +1,21 @@
+# Packages for Streamlit Community Cloud. It reads this file, not environment.yml at the
+# repo root, because a dependency file next to the entrypoint (app/app.py) takes
+# precedence. The app imports this repo's code from src/ directly (see app.py), so the
+# package itself is not installed here.
+#
+# Versions match the credit-risk conda env. scikit-learn and lightgbm must match the
+# versions artifacts/model.joblib was saved with; tests/test_requirements.py checks it.
+streamlit==1.65.0
+pandas==3.0.6
+numpy==2.5.3
+scikit-learn==1.9.1
+lightgbm==4.7.0
+imbalanced-learn==0.14.2
+shap==0.52.0
+matplotlib==3.11.2
+altair==6.3.0
+pyyaml==6.0.3
+# models.py imports XGBoost (a candidate model). xgboost-cpu is the same library without
+# the large GPU dependencies; 3.4.1 is its latest release. The final model is LightGBM,
+# so this version does not affect predictions.
+xgboost-cpu==3.4.1

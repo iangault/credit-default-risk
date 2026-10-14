@@ -190,3 +190,27 @@ def test_save_evaluation_writes_table_and_plots(data, tmp_path):
     assert pd.read_csv(table_path)["setup"].tolist() == table["setup"].tolist()
     for path in (calibration_path, tradeoff_path):
         assert path.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_tradeoff_curves_draw_with_many_distinct_scores():
+    # 6,000 distinct scores give a precision-recall curve of 6,001 points; Altair refuses
+    # more than 5,000 rows per chart, so the curves are thinned before drawing.
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 6000)
+    y = (rng.uniform(0, 1, 6000) < proba).astype(int)
+    marks = pd.DataFrame({"label": ["a"], "threshold": [0.3]})
+    chart = plot_tradeoff_curves(y, proba, marks)
+    chart.to_dict()  # raises MaxRowsError if a curve is too long
+    for panel in chart.hconcat:
+        assert len(panel.layer[0].data) <= 1000
+
+
+def test_tradeoff_curves_subtitle_names_the_points():
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 200)
+    y = (rng.uniform(0, 1, 200) < proba).astype(int)
+    marks = pd.DataFrame({"label": ["a"], "threshold": [0.3]})
+    default = plot_tradeoff_curves(y, proba, marks).to_dict()["title"]["subtitle"]
+    assert "cutoffs tuned for each cost ratio, and 0.5" in default
+    custom = plot_tradeoff_curves(y, proba, marks, points_note="the current cutoff")
+    assert "Points: the current cutoff" in custom.to_dict()["title"]["subtitle"]
