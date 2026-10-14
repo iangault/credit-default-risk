@@ -22,7 +22,7 @@ from credit_risk.data import (
     verify_raw,
 )
 from credit_risk.decision import load_model, run_decision, save_decision, save_model, train_final
-from credit_risk.evaluate import evaluate, save_evaluation
+from credit_risk.evaluate import evaluate, marked_thresholds, save_evaluation
 from credit_risk.experiments import run_experiments, save_experiments
 from credit_risk.explain import check_tree_model, save_explanations
 
@@ -77,7 +77,10 @@ def _run_evaluate(cfg: Config) -> None:
     model = load_model(cfg)  # stops if the model is missing or stale
     test = load_split("test", cfg)
     table, proba = evaluate(model, test, cfg)
-    table_path, plot_path = save_evaluation(table, test[TARGET], proba, cfg)
+    marks = marked_thresholds(model, cfg)  # cutoffs to mark on the ROC/PR curves
+    table_path, calibration_path, tradeoff_path = save_evaluation(
+        table, test[TARGET], proba, marks, cfg
+    )
     print(table.set_index("setup").round(3).to_string())
     # The last row is the train estimate; its recall, precision and counts are always
     # blank, so check only the four columns it should have.
@@ -87,7 +90,7 @@ def _run_evaluate(cfg: Config) -> None:
             "Note: part of the train estimate was not found; run `make experiments` and "
             "`make decide` with the current config to fill it."
         )
-    print(f"Wrote {table_path} and {plot_path}")
+    print(f"Wrote {table_path}, {calibration_path} and {tradeoff_path}")
 
 
 def _run_explain(cfg: Config) -> None:

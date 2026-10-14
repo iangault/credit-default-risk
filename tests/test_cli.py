@@ -159,6 +159,7 @@ def test_evaluate_stage_writes_metrics(tmp_path, capsys):
     table = pd.read_csv(tmp_path / "reports" / "tables" / "test_metrics.csv")
     assert table["setup"].iloc[0] == "model at tuned threshold"
     assert (tmp_path / "reports" / "figures" / "calibration_test.png").is_file()
+    assert (tmp_path / "reports" / "figures" / "roc_pr_test.png").is_file()
     assert "flag everyone" in capsys.readouterr().out
 
 

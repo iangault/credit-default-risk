@@ -14,9 +14,12 @@ from credit_risk.evaluate import (
     calibration_plot_path,
     decision_metrics,
     evaluate,
+    marked_thresholds,
     metrics_table_path,
     plot_calibration,
+    plot_tradeoff_curves,
     save_evaluation,
+    tradeoff_plot_path,
     train_estimate,
 )
 from credit_risk.experiments import experiments_table_path
@@ -139,12 +142,51 @@ def test_calibration_plot_has_points_and_diagonal():
     assert "Calibration" in spec["title"]["text"]
 
 
-def test_save_evaluation_writes_table_and_plot(data, tmp_path):
+class FakeModel:
+    """Stands in for the saved model where only its tuned threshold is read."""
+
+    best_threshold_ = 0.2
+
+
+def test_marked_thresholds_adds_other_cost_ratios_from_decision_table(tmp_path):
+    cfg = small_cfg(tmp_path)  # logreg + sigmoid, misses cost 5x
+    write_tables(cfg)  # decision.csv: logreg sigmoid at 5x (0.17) and 3x (0.25)
+    marks = marked_thresholds(FakeModel(), cfg)
+    # The 5x row comes from the saved model (0.2), not decision.csv (0.17).
+    assert marks.to_dict("list") == {
+        "label": ["misses cost 5x (saved model)", "misses cost 3x", "default 0.5"],
+        "threshold": [0.2, 0.25, 0.5],
+    }
+
+
+def test_marked_thresholds_without_decision_table(tmp_path):
+    marks = marked_thresholds(FakeModel(), small_cfg(tmp_path))
+    assert marks["threshold"].tolist() == [0.2, 0.5]
+
+
+def test_tradeoff_plot_has_roc_and_pr_panels_with_markers():
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 500)
+    y = (rng.uniform(0, 1, 500) < proba).astype(int)
+    marks = pd.DataFrame({"label": ["a", "b"], "threshold": [0.3, 0.5]})
+    spec = plot_tradeoff_curves(y, proba, marks).to_dict()
+    assert [panel["title"] for panel in spec["hconcat"]] == ["ROC curve", "Precision-recall curve"]
+    # Each panel: the curve, a dashed reference line, and the cutoff markers.
+    assert all(len(panel["layer"]) == 3 for panel in spec["hconcat"])
+
+
+def test_save_evaluation_writes_table_and_plots(data, tmp_path):
     train, test = data
     cfg = small_cfg(tmp_path)
-    table, proba = evaluate(train_final(cfg, train), test, cfg)
-    table_path, plot_path = save_evaluation(table, test[TARGET], proba, cfg)
+    model = train_final(cfg, train)
+    table, proba = evaluate(model, test, cfg)
+    marks = marked_thresholds(model, cfg)
+    table_path, calibration_path, tradeoff_path = save_evaluation(
+        table, test[TARGET], proba, marks, cfg
+    )
     assert table_path == metrics_table_path(cfg) == tmp_path / "reports/tables/test_metrics.csv"
-    assert plot_path == calibration_plot_path(cfg)
+    assert calibration_path == calibration_plot_path(cfg)
+    assert tradeoff_path == tradeoff_plot_path(cfg) == tmp_path / "reports/figures/roc_pr_test.png"
     assert pd.read_csv(table_path)["setup"].tolist() == table["setup"].tolist()
-    assert plot_path.read_bytes()[:4] == b"\x89PNG"
+    for path in (calibration_path, tradeoff_path):
+        assert path.read_bytes()[:4] == b"\x89PNG"

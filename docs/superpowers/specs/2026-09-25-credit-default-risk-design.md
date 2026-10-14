@@ -259,7 +259,7 @@ plan when reached.
 | M4 | Feature engineering: utilization, payment-to-bill ratios, months delinquent, trend features | Author | With vs without comparison under the same CV |
 | M5 | Decision layer: calibration, cost-based threshold, `make decide`, `make train` | Claude (author chose this on 2026-10-11) | Comparison table and cost vs threshold plot; saved model with threshold |
 | M6 | Test and explain: `make evaluate`, `make explain` | Claude (author chose this on 2026-10-11) | Final metrics and SHAP figures |
-| M7 | Write-up: README results, figures, limitations and fairness note | Author writes, Claude edits | README meets the 2-minute criterion |
+| M7 | Write-up: short README results section linking to `docs/results.md` (the full story with figures, for a non-technical reader); limitations and fairness note | Claude drafts, author edits (author chose this on 2026-10-13) | README meets the 2-minute criterion |
 
 ## Learning process (milestones the author owns)
 
@@ -277,8 +277,14 @@ plan when reached.
 
 The dataset includes SEX, MARRIAGE, and AGE. Using these in credit
 decisions raises legal and ethical concerns in many jurisdictions. M7
-includes a short section comparing performance with and without these
-features and discussing the implications.
+includes a short note discussing the implications, using the existing
+SHAP importance table to show how much the model relies on these
+columns.
+
+> Changed 2026-10-13 before M7: the author chose a note only. The
+> earlier plan to compare performance with and without these columns
+> needs new code, so it is listed in the note as not done and as
+> possible future work, along with a check of error rates by group.
 
 ## Open questions
 
