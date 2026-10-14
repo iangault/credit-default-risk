@@ -21,6 +21,7 @@ from credit_risk.showcase import (
     example_clients,
     is_edited,
     is_flagged,
+    load_assets,
     outcomes_at_ratio,
     payment_history,
     plot_contributions,
@@ -255,3 +256,38 @@ def test_outcomes_at_ratio_match_decision_metrics():
     assert (nobody["caught"], nobody["false_alarms"]) == (0, 0)
     assert nobody["missed"] == y.sum()
     assert nobody["cost_per_client"] == pytest.approx(4.0 * y.mean())
+
+
+@pytest.fixture(scope="module")
+def assets():
+    # The committed model and the real test split, as the app loads them. Reading the
+    # test set here is allowed: the app is one of its readers (project spec, 2026-10-14).
+    return load_assets(BASE)
+
+
+def test_load_assets_matches_make_evaluate(assets):
+    assert len(assets.test_X) == 6000
+    assert TARGET not in assets.test_X.columns
+    assert assets.test_X.index.tolist() == list(range(6000))
+    assert assets.proba.shape == (6000,)
+    assert assets.saved_cutoff == pytest.approx(0.1697, abs=1e-3)
+    # Same clients and probabilities as reports/tables/test_metrics.csv.
+    flagged = assets.proba >= assets.saved_cutoff
+    assert flagged.sum() == 2666
+    assert (flagged & (assets.test_y == 1)).sum() == 1016
+
+
+def test_load_assets_ranges_come_from_train(assets):
+    ranges = assets.ranges
+    assert (ranges.limit_min, ranges.limit_max) == (10000, 500000)
+    assert (ranges.age_min, ranges.age_max) == (21, 79)
+
+
+def test_load_assets_examples_are_in_their_groups(assets):
+    assert set(assets.examples) == {"caught", "missed", "false_alarm", "cleared"}
+    flagged = assets.proba >= assets.saved_cutoff
+    y = assets.test_y
+    assert y[assets.examples["caught"]] == 1 and flagged[assets.examples["caught"]]
+    assert y[assets.examples["missed"]] == 1 and not flagged[assets.examples["missed"]]
+    assert y[assets.examples["false_alarm"]] == 0 and flagged[assets.examples["false_alarm"]]
+    assert y[assets.examples["cleared"]] == 0 and not flagged[assets.examples["cleared"]]

@@ -25,14 +25,25 @@ the shape model.predict_proba takes.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import altair as alt
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import TunedThresholdClassifierCV
 
-from credit_risk.config import Costs
-from credit_risk.data import BILL_AMTS, PAY_AMTS, PAY_STATUS
+from credit_risk.config import Config, Costs
+from credit_risk.data import (
+    BILL_AMTS,
+    PAY_AMTS,
+    PAY_STATUS,
+    TARGET,
+    clean,
+    load_raw,
+    split,
+    verify_raw,
+)
+from credit_risk.decision import load_model
 from credit_risk.evaluate import decision_metrics
 from credit_risk.explain import nearest_to_median, shap_explanation
 
@@ -79,6 +90,30 @@ SCENARIOS = (
 )
 MIN_PAYMENT_SHARE = 0.06  # median minimum payment, as a share of the previous bill
 LATE_PAYMENT_SHARE = 0.04  # median payment of clients 2 months late, same basis
+
+
+@dataclass(frozen=True)
+class Ranges:
+    """Slider ranges, from the training clients: limit min to 99th percentile (so a few
+    very high limits do not stretch the slider), age min to max."""
+
+    limit_min: int
+    limit_max: int
+    age_min: int
+    age_max: int
+
+
+@dataclass(frozen=True)
+class Assets:
+    """Everything the app loads once at startup. None of it changes while it runs."""
+
+    model: TunedThresholdClassifierCV
+    test_X: pd.DataFrame  # test clients without the target; index 0 to n-1
+    test_y: np.ndarray  # 1 = defaulted
+    proba: np.ndarray  # calibrated probability of default per test client
+    ranges: Ranges
+    examples: dict[str, int]  # EXAMPLE_LABELS key -> row position in test_X
+    saved_cutoff: float  # the saved model's cutoff (searched on train at the config's costs)
 
 
 def status_label(code: int) -> str:
@@ -279,3 +314,37 @@ def outcomes_at_ratio(y: Sequence[int], proba: Sequence[float], ratio: float) ->
             }
         )
     return pd.DataFrame(rows)
+
+
+def load_assets(cfg: Config) -> Assets:
+    """Load the saved model and rebuild the train/test split in memory.
+
+    The split comes from the committed raw CSV with the config's seed, so it is the same
+    6,000 test clients as make evaluate, and nothing is written to disk (data/processed
+    is not in git). Raises DataFileError if the model is missing or stale, or the raw
+    CSV does not match its checksum.
+    """
+    model = load_model(cfg)  # checks artifacts/model.json against the config
+    verify_raw(cfg)
+    train, test = split(clean(load_raw(cfg)), cfg)
+    test_X = test.drop(columns=TARGET).reset_index(drop=True)
+    test_y = test[TARGET].to_numpy()
+    proba = model.predict_proba(test_X)[:, 1]  # one scoring, as in make evaluate
+    ranges = Ranges(
+        limit_min=int(train["LIMIT_BAL"].min()),
+        limit_max=int(train["LIMIT_BAL"].quantile(0.99)),
+        age_min=int(train["AGE"].min()),
+        age_max=int(train["AGE"].max()),
+    )
+    saved_cutoff = float(model.best_threshold_)
+    return Assets(
+        model=model,
+        test_X=test_X,
+        test_y=test_y,
+        proba=proba,
+        ranges=ranges,
+        # Chosen once at the saved cutoff, so each example stays the same person when the
+        # app's cost slider moves.
+        examples=example_clients(test_y, proba, saved_cutoff),
+        saved_cutoff=saved_cutoff,
+    )
