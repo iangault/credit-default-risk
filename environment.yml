@@ -13,6 +13,8 @@ dependencies:
   - pyarrow>=15
   - lightgbm>=4
   - xgboost>=2
+  - shap>=0.50             # SHAP explanations of the final model (make explain)
+  - matplotlib-base>=3.8   # draws the SHAP plots; the other charts use altair
   - jupyterlab>=4
   - altair>=5
   # vegafusion pre-aggregates chart data in Python so notebooks don't embed raw rows;

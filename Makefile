@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments decide train all smoke
+.PHONY: help setup lint format test data split experiments decide train evaluate explain all smoke
 .NOTPARALLEL:
 
 help:
@@ -40,8 +40,13 @@ help:
 	@printf "%b\n" "                      writes reports/tables/decision.csv and a cost plot"
 	@printf "%b\n" "  $(YELLOW)make train$(RESET)        - Fit the 'final' setup on train; saves artifacts/model.joblib"
 	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 4 - Test and explain:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make evaluate$(RESET)     - Score the saved model on the test set;"
+	@printf "%b\n" "                      writes reports/tables/test_metrics.csv and a calibration plot"
+	@printf "%b\n" "  $(YELLOW)make explain$(RESET)      - SHAP figures for the test set and two example clients"
+	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
-	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data, split, experiments, decide, train)"
+	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data through explain)"
 	@printf "%b\n" "  $(YELLOW)make smoke$(RESET)        - Run every step on a 1,000-row sample (what CI runs)"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)How the code fits together (src/credit_risk/, in order):$(RESET)"
@@ -54,6 +59,8 @@ help:
 	@printf "%b\n" "  $(GREEN)6 pipeline.py$(RESET)     - [Features], scale, [resample], encode, model"
 	@printf "%b\n" "  $(GREEN)7 experiments.py$(RESET)  - Cross-validate each setup, results table"
 	@printf "%b\n" "  $(GREEN)8 decision.py$(RESET)     - Calibrate, tune threshold to costs, save model"
+	@printf "%b\n" "  $(GREEN)9 evaluate.py$(RESET)     - Test-set metrics, comparisons, calibration plot"
+	@printf "%b\n" "  $(GREEN)10 explain.py$(RESET)     - SHAP summary and example clients"
 	@printf "%b\n" "  $(GREEN)cli.py$(RESET)            - The credit-risk command; make targets call it"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(DIM)Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml$(RESET)"
@@ -114,10 +121,22 @@ train:
 	$(RUN) train
 	@printf "%b\n" "$(GREEN)Model saved.$(RESET)"
 
+# ─── Step 4: Test and explain ────────────────────────────────────────────────
+
+evaluate:
+	@printf "%b\n" "$(CYAN)Scoring the saved model on the test set...$(RESET)"
+	$(RUN) evaluate
+	@printf "%b\n" "$(GREEN)Evaluation complete.$(RESET)"
+
+explain:
+	@printf "%b\n" "$(CYAN)Explaining the saved model's test predictions with SHAP...$(RESET)"
+	$(RUN) explain
+	@printf "%b\n" "$(GREEN)Explanations complete.$(RESET)"
+
 # ─── Run everything ──────────────────────────────────────────────────────────
 
 # Steps in order; .NOTPARALLEL keeps them sequential even with make -j.
-all: data split experiments decide train
+all: data split experiments decide train evaluate explain
 
 smoke:
 	@printf "%b\n" "$(CYAN)Smoke run: every step on a small sample...$(RESET)"

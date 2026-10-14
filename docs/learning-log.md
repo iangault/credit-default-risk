@@ -638,3 +638,115 @@ Full table: `reports/tables/decision.csv`; curves: `reports/figures/cost_vs_thre
   each cutoff, so differences under about 0.005 cannot be told apart from noise.
 - **The costs are a judgment, not data.** Real costs depend on balances, recovery rates
   and client value, which this dataset does not include.
+
+---
+
+### M6: Test and explain (2026-10-11)
+
+#### 1. Why the test set is read only now
+
+Every choice so far (model, features, class weights, calibration, threshold, costs) was
+made on train. The test set (6,000 clients split off in M1) was not read, so its score
+estimates how the model does on clients it has never seen. If test results were used to
+adjust anything, the test set would become part of the tuning and its score would be
+optimistic.
+
+The spec rule, reworded in M6: the test set is read only by `evaluate` and `explain`;
+neither changes the model, and no setting is changed after seeing their output. That makes
+it a process commitment: a disappointing result is reported, not tuned away. A safeguard
+supports it: `make train` records its settings in `artifacts/model.json` (the final
+experiment's full definition, calibration, costs, folds, and split settings), and
+`evaluate` and `explain` refuse a model trained under different settings. Recording the
+split settings matters most: a new split could put rows the model trained on into test.
+
+#### 2. Results on the test set (1,327 of 6,000 clients defaulted, 22.1%)
+
+| Setup | Cost per client | ROC-AUC | PR-AUC | Recall | Precision |
+|---|---|---|---|---|---|
+| Model at tuned threshold (0.17) | 0.534 | 0.788 | 0.554 | 0.766 | 0.381 |
+| Same model at 0.5 | 0.751 | 0.788 | 0.554 | 0.356 | 0.673 |
+| Flag nobody | 1.106 | | | 0 | 0 |
+| Flag everyone | 0.779 | | | 1.000 | 0.221 |
+| Train CV estimate | 0.555 | 0.776 | 0.555 | | |
+
+- **The train estimate held up.** Test cost 0.534 vs 0.555 estimated; ROC-AUC 0.788 vs
+  0.776. Both slightly better on test, within sampling noise (section 6). ROC-AUC matches
+  the original lab's tuned LightGBM (about 0.787).
+- **The M5 threshold is worth 29%.** At 0.5 the same scores cost 0.751 per client.
+- **In plain numbers:** the model flags 2,666 of 6,000 clients (44%), catches 1,016 of the
+  1,327 defaulters (77%), misses 311, and raises 1,650 false alarms (35% of the clients
+  who would have paid). That is what a 5:1 cost ratio implies; "flag" fits a review or a
+  lower limit better than an outright rejection.
+
+#### 3. Calibration on unseen clients
+
+`reports/figures/calibration_test.png` groups test clients into 10 equal-size groups by
+predicted probability and compares each group's average prediction with its actual default
+rate. The points stay close to the diagonal: the largest gap is a group predicted at about
+42% that defaulted at 47%, and at the low end about 7% predicted came out at 4.5%. So the
+probabilities can be read as probabilities on new clients, not only on train.
+
+#### 4. SHAP, explained simply
+
+**Analogy: splitting a group bill.** Several friends share a meal and want to split the
+bill by what each one added. The order they arrived in changes how much each one seems to
+add (the second person to order dessert adds less to a shared platter). Shapley values
+average each person's addition over every possible arrival order, which gives one fair
+share each. SHAP does the same for columns: each column's share of one client's score,
+averaged over every order in which the columns could be added.
+
+- **Additivity:** base value (the average score) + the client's SHAP values = the client's
+  score. A test checks that the two sides add up.
+- **Units:** log-odds of the LightGBM score before calibration. +0.7 multiplies the odds of
+  default by about 2. Sigmoid calibration keeps the order of clients, so "pushes risk up"
+  means the same after calibration.
+- **Reading the beeswarm** (`shap_summary.png`): one row per column, most important at the
+  top; one dot per test client, placed left (lower risk) or right (higher risk) by its
+  SHAP value, colored by the column's value (red high, blue low).
+- **Reading a waterfall** (`shap_client_*.png`): one client, starting from the base value
+  at the bottom; each bar is one column pushing the score up (red) or down (blue); the top
+  is the client's score. The plots show original values (LIMIT_BAL = 50000), not the
+  scaled ones the model sees.
+
+#### 5. What drives the model
+
+Top columns by mean absolute SHAP value (`reports/tables/shap_importance.csv`):
+
+| Column | Mean \|SHAP\| | Reading |
+|---|---|---|
+| PAY_1 | 0.480 | Last month's repayment status; a late payment pushes risk up sharply |
+| LIMIT_BAL | 0.203 | Higher credit limit, lower risk |
+| BILL_AMT1 | 0.164 | Latest bill amount |
+| PAY_AMT2 | 0.153 | Larger recent payments, lower risk |
+| PAY_AMT1 | 0.109 | Same |
+
+PAY_1 moves scores more than twice as much as any other column, which matches the EDA.
+
+**The two clients** (picked by a fixed rule: the client nearest each group's median
+probability):
+- **Flagged defaulter, client 18048 (probability 0.46).** Paid on time last month
+  (PAY_1 = -1 pulls risk down), but was 2 months late in each of the two months before and
+  paid nothing in four of the last months. The model added these up correctly.
+- **Missed defaulter, client 3448 (probability 0.12).** "Paid duly" in every month shown,
+  a 150,000 limit, and a 34,672 payment six months ago. Only the bill amounts pushed risk
+  up (+0.20 and +0.09), and not by enough. Some defaults have no warning sign in this data, and a threshold low enough to
+  catch them would flag many more good clients.
+
+**Demographics, for M7:** `SEX_2` (female) ranks 10th of 28 and nudges scores down
+slightly. `MARRIAGE_1` ranks 20th, `AGE` 21st, and `EDUCATION_4` 22nd. The model uses
+these columns; whether it should is the fairness question M7 takes up.
+
+#### 6. Limitations
+
+- **One test set gives one number.** The cost per client has a standard error of about
+  0.015 (from the counts: miss cost 5, false alarm cost 1, 6,000 clients), so a rough 95%
+  range is ±0.03. The gap between test (0.534) and the train estimate (0.555) is within it.
+  No confidence intervals are computed beyond this.
+- **SHAP explains the model, not the world.** It shows what the model uses, not what causes
+  default. A column can matter to the model because it stands in for something unmeasured.
+- **Two waterfalls are two clients.** They illustrate how the model reasons; the beeswarm
+  and importance table are the summary.
+- **Unseen categories in small samples.** The smoke run and tiny test projects can give a
+  cross-validation fold no clients with a rare code (MARRIAGE = 3 is 1.2% of train). The
+  encoder sets such a client to all zeros by design and warns. It does not occur at full
+  size: inner training folds of about 15,000 rows hold about 180 such clients.

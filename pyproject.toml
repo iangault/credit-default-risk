@@ -33,3 +33,6 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# shap (0.52) calls matplotlib colormap methods that matplotlib plans to deprecate; the
+# warning comes from shap's own import, not from this project's code.
+filterwarnings = ["ignore::PendingDeprecationWarning:shap.plots.colors._colors"]
