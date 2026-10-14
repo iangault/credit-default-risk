@@ -94,6 +94,20 @@ def shap_explanation(model: TunedThresholdClassifierCV, X: pd.DataFrame) -> shap
     )
 
 
+def nearest_to_median(proba: np.ndarray, in_group: np.ndarray) -> int | None:
+    """Row number of the client in a group whose probability is nearest the group's median.
+
+    `in_group` is a True/False array the length of `proba`. None for an empty group.
+    Ties go to the first such row. Shared by pick_clients and the app's example clients
+    (showcase.py), so both use one fixed rule.
+    """
+    rows = np.flatnonzero(in_group)
+    if len(rows) == 0:
+        return None
+    distance = np.abs(proba[rows] - np.median(proba[rows]))
+    return int(rows[np.argmin(distance)])
+
+
 def pick_clients(y: Sequence[int], proba: Sequence[float], threshold: float) -> dict[str, int]:
     """Row numbers of a typical correctly flagged defaulter and a typical missed one.
 
@@ -106,11 +120,9 @@ def pick_clients(y: Sequence[int], proba: Sequence[float], threshold: float) -> 
     groups = {"flagged": (y == 1) & flagged, "missed": (y == 1) & ~flagged}
     picks = {}
     for name, in_group in groups.items():
-        rows = np.flatnonzero(in_group)
-        if len(rows) == 0:
-            continue
-        distance = np.abs(proba[rows] - np.median(proba[rows]))
-        picks[name] = int(rows[np.argmin(distance)])  # ties: the first such row
+        row = nearest_to_median(proba, in_group)
+        if row is not None:  # a group with no clients is left out
+            picks[name] = row
     return picks
 
 
