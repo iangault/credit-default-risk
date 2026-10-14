@@ -99,7 +99,7 @@ for the list of targets.
 | How are models scored? | `src/credit_risk/experiments.py` |
 | How is the decision threshold chosen? | `src/credit_risk/decision.py` and the `decision` / `final` sections of `configs/base.yaml` |
 | Which setup was chosen, and why? | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png`, and the M5 learning log entry |
-| How well does the final model do on unseen clients? | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png` |
+| How well does the final model do on unseen clients? | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png`, `reports/figures/roc_pr_test.png` |
 | What drives the model's predictions? | `reports/figures/shap_summary.png`, `reports/tables/shap_importance.csv`, and the two `shap_client_*.png` figures |
 | What were the results? | `docs/results.md`; the cross-validation comparison is in `reports/tables/experiments.csv` |
 | What does the data look like? | `notebooks/01-eda.ipynb` |
