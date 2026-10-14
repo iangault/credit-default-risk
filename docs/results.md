@@ -163,6 +163,59 @@ at the start and used once, at the end, to check the final model.
 
 Full table: `reports/tables/test_metrics.csv`.
 
+### The trade-off at every cutoff
+
+The table shows two cutoffs. The curves below show all of them at once, on the same
+unseen clients, with the cutoffs for each cost ratio marked.
+
+Everything in this section comes from one scoring of the test set. The final model was
+fitted on training data only, then gave each of the 6,000 test clients one probability
+of default. Nothing was refitted after that. A cutoff only sorts those fixed
+probabilities into "flag" and "don't flag", so trying a different cutoff, or drawing a
+curve through every cutoff, is a different way of counting the same predictions, not a
+new test.
+
+What would break the test is choosing something because of what it shows. Every cutoff
+below was set on training data in section 5 before the test set was used, and the
+final model stays at 0.17 whatever these results say. The 3x and 10x rows show what
+those other cost ratios would give; they are not candidates to switch to. Picking the
+cutoff that looks best here would tune the model on the test set, and its test result
+would then overstate how it does on new clients.
+
+![ROC and precision-recall curves on the test set](../reports/figures/roc_pr_test.png)
+
+How to read it: each curve traces what happens as the cutoff slides from high (bottom
+left of the ROC curve, top left of the precision-recall curve) to low.
+
+- **ROC curve (left):** share of defaulters caught (up) against share of paying clients
+  flagged (across). The dashed diagonal is random guessing. The area under this curve is
+  the ROC-AUC of 0.788.
+- **Precision-recall curve (right):** share of flagged clients who really default (up)
+  against share of defaulters caught (across). The dashed line is 22%, the default rate,
+  which is what flagging everyone would give. The area under this curve is the PR-AUC of
+  0.554. With only 22% of clients defaulting, this panel shows the cost of false alarms
+  more plainly than ROC does.
+
+The cost search in section 5 does not use these curves, but for a given cost ratio it
+picks one point on them. The markers show where each ratio lands:
+
+| Cutoff | Defaulters caught | Flagged clients who default | Paying clients flagged |
+|---|---|---|---|
+| 0.5 (default) | 36% | 67% | 5% |
+| 0.26 (misses cost 3x) | 60% | 50% | 17% |
+| **0.17 (misses cost 5x, final model)** | **77%** | **38%** | **35%** |
+| 0.09 (misses cost 10x) | 95% | 27% | 74% |
+
+- **The cost ratio matters more than the choice of model.** In section 5 the candidate
+  models differed by about 0.02 in cost per client. Moving from 3x to 10x changes the
+  share of defaulters caught from 60% to 95%, and the share of paying clients flagged
+  from 17% to 74%. The 5:1 ratio is borrowed from another dataset (section 2), so it is
+  the assumption to check first before using this model.
+- **There is no natural break in the curve.** Precision falls steadily as more
+  defaulters are caught, so each extra defaulter costs a little more in false alarms
+  than the one before. Nothing in the data points to a "best" cutoff on its own; the
+  costs have to decide it.
+
 ## 7. What drives the predictions
 
 SHAP is a method that splits each client's score into contributions from each column:
@@ -251,7 +304,7 @@ make all                  # runs every stage
 |---|---|---|
 | 3 | `make experiments` | `reports/tables/experiments.csv` |
 | 5 | `make decide`, `make train` | `reports/tables/decision.csv`, `reports/figures/cost_vs_threshold.png` |
-| 4, 6 | `make evaluate` | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png` |
+| 4, 6 | `make evaluate` | `reports/tables/test_metrics.csv`, `reports/figures/calibration_test.png`, `reports/figures/roc_pr_test.png` |
 | 7 | `make explain` | `reports/tables/shap_importance.csv`, `reports/figures/shap_*.png` |
 
 How each step works, and why each choice was made, is in `docs/learning-log.md`.
