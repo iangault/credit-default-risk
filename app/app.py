@@ -34,7 +34,9 @@ from credit_risk.evaluate import plot_tradeoff_curves
 REPO = "https://github.com/iangault/credit-default-risk"
 RESULTS = f"{REPO}/blob/main/docs/results.md"
 
-st.set_page_config(page_title="Credit default risk", layout="wide")
+TITLE = "Credit Card Default Predictor"
+
+st.set_page_config(page_title=TITLE, layout="wide")
 
 
 @st.cache_resource(show_spinner="Loading the model and the test clients...")
@@ -104,7 +106,19 @@ MATRIX_LABELS = {
 }
 FLAG_COLOR, REFERENCE_COLOR = "#e4572e", "#7f7f7f"  # orange-red stands out from the blue curve
 
-about, client_tab, cost_tab = st.tabs(["About", "Try a client", "Cost ratio"])
+TABS = ["About", "Try a client", "Cost ratio"]
+
+
+def open_tab(label: str) -> None:
+    """Switch to another tab (for the About tab's buttons)."""
+    st.session_state.view = label
+
+
+# Above the tabs, so it shows on every tab.
+st.title(TITLE)
+# key + on_change="rerun" make the selected tab part of session_state, so a button can
+# change it. Every tab's content still runs on each rerun (none of it checks .open).
+about, client_tab, cost_tab = st.tabs(TABS, key="view", on_change="rerun")
 
 # ---- Tab 1: About ------------------------------------------------------------------
 
@@ -137,19 +151,23 @@ ABOUT_CARDS = [
 ]
 TRY_CARDS = [
     (
-        ":material/person_search: Try a client",
+        "go_client",
+        "Try a client",
+        ":material/person_search:",
         "Pick a real test client, change their payment behavior, credit limit or "
         "demographics, and watch the prediction and the reasons behind it change.",
     ),
     (
-        ":material/tune: Cost ratio",
+        "go_cost",
+        "Cost ratio",
+        ":material/tune:",
         "Click the cost of a miss up or down and see how the cutoff moves, how many "
         "defaulters are caught, and how many clients who would have paid are flagged.",
     ),
 ]
 
 with about:
-    st.header("Who will miss next month's credit card payment?")
+    st.subheader("Who will miss next month's credit card payment?")
     st.markdown(
         "A model that ranks credit card clients by their risk of default, and a cutoff "
         "chosen from what each kind of mistake costs."
@@ -174,11 +192,19 @@ with about:
             st.markdown(body)
 
     st.subheader("What to try")
-    for column, (title, body) in zip(st.columns(2), TRY_CARDS, strict=True):
+    for column, (key, label, icon, body) in zip(st.columns(2), TRY_CARDS, strict=True):
         with column.container(border=True, height="stretch"):
-            st.markdown(f"**{title}**")
+            st.markdown(f"**{icon} {label}**")
             st.markdown(body)
-            st.caption("Open the tab above.")
+            st.button(
+                f"Open {label}",
+                key=key,
+                type="primary",
+                icon=":material/arrow_forward:",
+                icon_position="right",
+                on_click=open_tab,
+                args=(label,),
+            )
 
     st.markdown(f":material/code: [Code on GitHub]({REPO}) · [Full write-up]({RESULTS})")
 

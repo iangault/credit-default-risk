@@ -210,3 +210,26 @@ def test_about_tab_leads_with_the_headline_numbers(app):
     for heading in ("The data", "The model", "The key idea", "The result", "Try a client"):
         assert heading in text
     assert "github.com/iangault/credit-default-risk" in text
+
+
+def test_title_sits_above_the_tabs(app):
+    assert app.title[0].value == "Credit Card Default Predictor"
+
+
+@pytest.mark.parametrize(
+    ("button", "tab_label"), [("go_client", "Try a client"), ("go_cost", "Cost ratio")]
+)
+def test_about_buttons_open_their_tab(app, button, tab_label):
+    app.button(key=button).click().run()
+    assert not app.exception
+    assert app.session_state["view"] == tab_label
+
+
+def test_theme_sets_one_accent_color_for_buttons_and_controls():
+    # Streamlit reads .streamlit/config.toml from the folder it is started in (the repo
+    # root, for `make app` and for Community Cloud). primaryColor colors primary buttons,
+    # radios, sliders and the number box.
+    import tomllib
+
+    theme = tomllib.loads((ROOT / ".streamlit" / "config.toml").read_text())["theme"]
+    assert theme["primaryColor"] == "#6d28d9"

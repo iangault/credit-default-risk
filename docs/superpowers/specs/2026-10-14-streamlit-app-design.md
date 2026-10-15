@@ -298,3 +298,8 @@ long to see the effect of a change. These replace the matching parts above:
   behavior is a set of radio buttons. Client details and payment history move into a
   collapsed section below both columns, so the controls and the result fit on one
   screen.
+- **Title and navigation:** "Credit Card Default Predictor" above the tabs; the About
+  tab's two "What to try" cards have buttons that open their tab.
+- **One accent color** (violet, `#6d28d9`, in `.streamlit/config.toml`) for primary
+  buttons, radios, sliders and the number box, apart from the colors that carry
+  meaning (red/green prediction, orange-red marker, blue curves).

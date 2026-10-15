@@ -1,0 +1,9 @@
+# Streamlit settings for the app (app/app.py). Streamlit reads this file from the folder
+# it is started in: the repo root, for `make app` and for Community Cloud.
+
+[theme]
+# One accent color for everything clickable: primary buttons (the About tab's buttons,
+# the selected example), radios, sliders and the number box. Violet, so it does not
+# clash with the colors that carry meaning: red/green for the prediction, orange-red
+# for the chart marker, blue for the curves.
+primaryColor = "#6d28d9"
