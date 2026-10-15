@@ -290,7 +290,11 @@ long to see the effect of a change. These replace the matching parts above:
 - **Colored prediction:** a red box ("Predicted to default: flag for review") or a green
   one ("Predicted to pay: don't flag") with the probability, and the change from the
   original in percentage points.
-- **Shorter controls:** the examples are one list plus a random button; payment
+- **Examples as a confusion matrix:** a 2×2 grid of buttons (rows: defaulted / paid;
+  columns: flagged / not flagged), the selected one highlighted, plus a random button.
+- **Your changes** is a heading-sized line, red when the risk goes up and green when it
+  goes down.
+- **Shorter controls:** payment
   behavior is a set of radio buttons. Client details and payment history move into a
   collapsed section below both columns, so the controls and the result fit on one
   screen.

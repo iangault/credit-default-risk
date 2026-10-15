@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from credit_risk import showcase as sc
+
 ROOT = Path(__file__).resolve().parents[1]
 APP = str(ROOT / "app" / "app.py")
 
@@ -65,7 +67,7 @@ def test_each_example_client_shows_a_colored_prediction(app):
         "cleared": "Predicted to pay",
     }
     for key, headline in expected.items():
-        app.radio(key="pick").set_value(key).run()
+        app.button(key=f"example_{key}").click().run()
         assert not app.exception
         assert headline in prediction(app)
         assert "%" in prediction(app)
@@ -74,25 +76,25 @@ def test_each_example_client_shows_a_colored_prediction(app):
 def test_client_tab_uses_the_saved_cutoff_whatever_the_ratio(app):
     # The cost ratio control only affects the Cost ratio tab.
     app.number_input(key="ratio").set_value(20).run()
-    app.radio(key="pick").set_value("cleared").run()
+    app.button(key="example_cleared").click().run()
     assert "Predicted to pay" in prediction(app)
     assert "17.0%" in prediction(app)  # the saved model's cutoff, 0.1697
 
 
 def test_changing_payment_behavior_changes_the_probability(app):
-    app.radio(key="pick").set_value("caught").run()
+    app.button(key="example_caught").click().run()
     before = prediction(app)
     app.radio(key="scenario").set_value("Pays in full every month").run()
     assert not app.exception
     assert prediction(app) != before
-    assert any("points from the original" in m.value for m in app.markdown)
+    assert any("Your changes" in m.value for m in app.markdown)
 
 
 def test_picking_another_client_resets_the_controls(app):
     app.radio(key="scenario").set_value("Pays in full every month").run()
-    app.radio(key="pick").set_value("missed").run()
+    app.button(key="example_missed").click().run()
     assert app.radio(key="scenario").value == "As recorded"
-    assert not any("points from the original" in m.value for m in app.markdown)
+    assert not any("Your changes" in m.value for m in app.markdown)
 
 
 def test_fairness_controls_run(app):
@@ -108,11 +110,34 @@ def test_reset_button_restores_the_client(app):
     assert app.radio(key="scenario").value == "As recorded"
 
 
-def test_random_client_clears_the_example_choice(app):
+def test_random_client_runs(app):
     app.button(key="random").click().run()
     assert not app.exception
-    assert app.radio(key="pick").value is None
     assert prediction(app)
+
+
+def test_examples_sit_in_a_confusion_matrix(app):
+    # Rows: what actually happened. Columns: what the model decided at the saved cutoff.
+    text = " ".join(m.value for m in tab(app, "Try a client").markdown)
+    for heading in ("Flagged", "Not flagged", "Defaulted", "Paid"):
+        assert heading in text
+    labels = {key: app.button(key=f"example_{key}").label for key in sc.EXAMPLE_LABELS}
+    assert labels == {
+        "caught": "Caught (true positive)",
+        "missed": "Missed (false negative)",
+        "false_alarm": "False alarm (false positive)",
+        "cleared": "Cleared (true negative)",
+    }
+
+
+def test_your_changes_line_is_colored_by_direction(app):
+    # Paying in full lowers the caught defaulter's risk: a green down arrow.
+    app.button(key="example_caught").click().run()
+    app.radio(key="scenario").set_value("Pays in full every month").run()
+    change = [m.value for m in app.markdown if "Your changes" in m.value]
+    assert len(change) == 1
+    assert change[0].startswith("### ")
+    assert ":green[▼" in change[0]
 
 
 def test_client_details_are_in_a_collapsed_section(app):

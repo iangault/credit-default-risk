@@ -76,19 +76,14 @@ def reset_controls() -> None:
 
 def show_example(key: str) -> None:
     st.session_state.client = assets.examples[key]
-    st.session_state.pick = key  # the example list shows which one is selected
+    st.session_state.pick = key  # its button in the grid is highlighted
     st.session_state.shown = sc.EXAMPLE_LABELS[key]
     reset_controls()
 
 
-def show_picked() -> None:
-    """Called when the example list changes (on_change)."""
-    show_example(st.session_state.pick)
-
-
 def show_random() -> None:
     st.session_state.client = int(np.random.default_rng().integers(len(assets.test_X)))
-    st.session_state.pick = None  # no example selected in the list
+    st.session_state.pick = None  # no example button highlighted
     st.session_state.shown = "A random test client"
     reset_controls()
 
@@ -100,6 +95,13 @@ if "client" not in st.session_state:
 # The cutoff that sorted the examples into their groups, so each example's decision
 # matches its group name.
 CLIENT_CUTOFF = assets.saved_cutoff
+# Button text for each example in the confusion-matrix grid.
+MATRIX_LABELS = {
+    "caught": "Caught (true positive)",
+    "missed": "Missed (false negative)",
+    "false_alarm": "False alarm (false positive)",
+    "cleared": "Cleared (true negative)",
+}
 FLAG_COLOR, REFERENCE_COLOR = "#e4572e", "#7f7f7f"  # orange-red stands out from the blue curve
 
 about, client_tab, cost_tab = st.tabs(["About", "Try a client", "Cost ratio"])
@@ -189,15 +191,29 @@ with client_tab:
 
     with left:
         st.subheader("Pick a test client")
-        # One list instead of a button per example keeps the controls short enough to
-        # sit beside the result. Its value is None after "random" (nothing selected).
-        st.radio(
-            "Example clients",
-            [key for key in sc.EXAMPLE_LABELS if key in assets.examples],
-            format_func=sc.EXAMPLE_LABELS.get,
-            key="pick",
-            on_change=show_picked,
-        )
+        # The four examples laid out as a confusion matrix: rows are what actually
+        # happened, columns what the model decided at the saved cutoff.
+        with st.container(border=True):
+            corner, flagged, cleared = st.columns([1, 2, 2])
+            flagged.markdown("**Flagged**")
+            cleared.markdown("**Not flagged**")
+            for actual, keys in (
+                ("Defaulted", ("caught", "missed")),
+                ("Paid", ("false_alarm", "cleared")),
+            ):
+                label_col, *cells = st.columns([1, 2, 2], vertical_alignment="center")
+                label_col.markdown(f"**{actual}**")
+                for cell, key in zip(cells, keys, strict=True):
+                    cell.button(
+                        MATRIX_LABELS[key],
+                        key=f"example_{key}",
+                        on_click=show_example,
+                        args=(key,),
+                        disabled=key not in assets.examples,
+                        # The selected example stands out.
+                        type="primary" if st.session_state.pick == key else "secondary",
+                        width="stretch",
+                    )
         st.button("A random test client", key="random", on_click=show_random)
         st.caption(f"Showing: {st.session_state.shown} (test client ID {int(row['ID'].iloc[0])})")
 
@@ -255,7 +271,11 @@ with client_tab:
             f"{CLIENT_CUTOFF:.1%} or more."
         )
         if sc.is_edited(row, edited):
-            st.markdown(f"**Your changes:** {sc.change_from_original(before, after)}")
+            # A heading-sized line, red when the edits raise the risk, green when they
+            # lower it (rounded as the text is, so "No change" is gray).
+            points = round((after - before) * 100, 1)
+            color = "red" if points > 0 else "green" if points < 0 else "gray"
+            st.markdown(f"### Your changes: :{color}[{sc.change_from_original(before, after)}]")
         actual = "Yes" if assets.test_y[position] == 1 else "No"
         st.markdown(f"**Did this client actually default?** {actual}")
         st.altair_chart(
