@@ -210,9 +210,14 @@ def test_about_tab_leads_with_the_headline_numbers(app):
     assert metrics == {
         "Test clients the model never saw": "6,000",
         "Defaulters caught": "77%",
-        "Lower cost per client than cutoff 0.5": "29%",
+        "Cost of mistakes vs the usual 0.5 cutoff": "29% lower",
         "Cutoff for a 5x cost ratio": "0.17",
     }
+    cost = next(m for m in about.metric if m.label.startswith("Cost of mistakes"))
+    assert cost.delta == "0.53 vs 0.75 per client"
+    # Each number has a tooltip saying what it is.
+    assert all(m.proto.help for m in about.metric)
+    assert "A missed defaulter costs 5, a false alarm costs 1" in cost.proto.help
     text = " ".join(m.value for m in about.markdown)
     for heading in ("The data", "The model", "The key idea", "The result", "Try a client"):
         assert heading in text

@@ -168,6 +168,40 @@ ABOUT_CARDS = [
         "client was 29% lower than with a 0.5 cutoff, using the same model.",
     ),
 ]
+# The About tab's headline numbers: label, value, an optional line under it, and the
+# tooltip (the ⓘ next to the label). From the test-set table in docs/results.md.
+HEADLINE_NUMBERS = [
+    (
+        "Test clients the model never saw",
+        "6,000",
+        None,
+        "20% of the clients were set aside before any modelling and scored once at the "
+        "end. No choice about the model was made from them.",
+    ),
+    (
+        "Defaulters caught",
+        "77%",
+        None,
+        "1,016 of the 1,327 test clients who defaulted had a probability at or above "
+        "the 0.17 cutoff, so they would have been flagged for review.",
+    ),
+    (
+        "Cost of mistakes vs the usual 0.5 cutoff",
+        "29% lower",
+        "0.53 vs 0.75 per client",
+        "A missed defaulter costs 5, a false alarm costs 1. Averaged over 6,000 test "
+        "clients, the 0.17 cutoff's mistakes cost 0.53 per client and 0.5's cost 0.75. "
+        "Same model; only the cutoff differs.",
+    ),
+    (
+        "Cutoff for a 5x cost ratio",
+        "0.17",
+        None,
+        "Flag a client when their probability of default is 0.17 or more. With a miss "
+        "costing 5 times a false alarm, this cutoff had the lowest cost in a search on "
+        "the training clients (close to 1 / (1 + 5)).",
+    ),
+]
 TRY_CARDS = [
     (
         "go_client",
@@ -193,17 +227,13 @@ with about:
     )
 
     with st.container(border=True):
-        for column, (label, value) in zip(
-            st.columns(4),
-            [
-                ("Test clients the model never saw", "6,000"),
-                ("Defaulters caught", "77%"),
-                ("Lower cost per client than cutoff 0.5", "29%"),
-                ("Cutoff for a 5x cost ratio", "0.17"),
-            ],
-            strict=True,
+        for column, (label, value, note, help_text) in zip(
+            st.columns(4), HEADLINE_NUMBERS, strict=True
         ):
-            column.metric(label, value)
+            # note: a small gray line under the number (a delta with no arrow or color).
+            column.metric(
+                label, value, delta=note, delta_color="off", delta_arrow="off", help=help_text
+            )
 
     for column, (title, body) in zip(st.columns(4), ABOUT_CARDS, strict=True):
         with column.container(border=True, height="stretch"):
