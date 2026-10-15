@@ -1,9 +1,22 @@
 # credit-default-risk
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://credit-default-risk-2005-taiwan.streamlit.app/)
+[![CI](https://github.com/iangault/credit-default-risk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iangault/credit-default-risk/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Data: UCI](https://img.shields.io/badge/data-UCI%20ML%20Repository-lightgrey.svg)](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)
+
 Predicting whether a credit card client will miss next month's payment, built as a
 modular, reproducible ML pipeline.
 
 Results: [summary below](#results), full walkthrough in [docs/results.md](docs/results.md).
+
+**Try the model:** [credit-default-risk-2005-taiwan.streamlit.app](https://credit-default-risk-2005-taiwan.streamlit.app/).
+It runs on Streamlit Community Cloud's free tier, so if nobody has used it recently it
+can take about 30 seconds to wake up.
+
+![The app: picking an example client, changing their payment behavior, and the cost ratio tab](docs/images/app-demo.gif)
 
 ## The problem
 
@@ -158,6 +171,12 @@ made the design and modelling decisions; Claude Code wrote much of the code from
 written plans (`docs/superpowers/plans/`). I explored the data and compared models in
 notebooks, checked the generated code against tests and reruns, and recorded what I
 learned at each milestone in `docs/learning-log.md`.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The dataset is not covered by
+it: it comes from the UCI Machine Learning Repository, which distributes it under
+CC BY 4.0 (see the citation below).
 
 ## Acknowledgements
 
