@@ -16,6 +16,8 @@ Results: [summary below](#results), full walkthrough in [docs/results.md](docs/r
 It runs on Streamlit Community Cloud's free tier, so if nobody has used it recently it
 can take about 30 seconds to wake up.
 
+![The app: picking an example client, changing their payment behavior, and the cost ratio tab](docs/images/app-demo.gif)
+
 ## The problem
 
 The [Default of Credit Card Clients](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)
