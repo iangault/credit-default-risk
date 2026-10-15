@@ -5,6 +5,10 @@ modular, reproducible ML pipeline.
 
 Results: [summary below](#results), full walkthrough in [docs/results.md](docs/results.md).
 
+**Try the model:** [credit-default-risk-2005-taiwan.streamlit.app](https://credit-default-risk-2005-taiwan.streamlit.app/).
+It runs on Streamlit Community Cloud's free tier, so if nobody has used it recently it
+can take about 30 seconds to wake up.
+
 ## The problem
 
 The [Default of Credit Card Clients](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)

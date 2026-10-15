@@ -2,7 +2,8 @@
 
 Layout only. The logic (example clients, payment scenarios, scoring, SHAP
 contributions, test-set counts) is in src/credit_risk/showcase.py, which has tests.
-Run locally with `make app`; deployed on Streamlit Community Cloud (app/requirements.txt).
+Run locally with `make app`. Deployed on Streamlit Community Cloud from main
+(app/requirements.txt): https://credit-default-risk-2005-taiwan.streamlit.app/
 
 Streamlit runs this whole file again after every click. Values that must survive a
 rerun (which client is shown, the control values) live in st.session_state; the model
