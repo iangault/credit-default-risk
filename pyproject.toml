@@ -29,6 +29,9 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # Notebook setup cells import things that later cells (or the author) will use.
 "*.ipynb" = ["F401"]
+# app.py puts src/ on sys.path before importing the package (see its comment), so its
+# imports come after code.
+"app/app.py" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

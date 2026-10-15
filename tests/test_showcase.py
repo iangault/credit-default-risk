@@ -1,0 +1,345 @@
+from dataclasses import replace
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+from credit_risk.config import Costs, Final, load_config
+from credit_risk.data import TARGET, clean, load_raw
+from credit_risk.decision import train_final
+from credit_risk.evaluate import decision_metrics
+from credit_risk.explain import inner_pipeline, nearest_to_median
+from credit_risk.showcase import (
+    CHANGED_COLUMNS,
+    EXAMPLE_LABELS,
+    MONTHS,
+    PLAIN_LABELS,
+    SCENARIOS,
+    apply_scenario,
+    change_from_original,
+    change_styles,
+    compare_details,
+    compare_history,
+    cutoff_for,
+    describe_client,
+    edit_client,
+    example_clients,
+    is_edited,
+    is_flagged,
+    load_assets,
+    outcomes_at_ratio,
+    payment_history,
+    plot_contributions,
+    prediction_headline,
+    score_client,
+    status_label,
+    top_contributions,
+    widen,
+)
+
+ROOT = Path(__file__).resolve().parents[1]
+BASE = load_config(ROOT / "configs" / "base.yaml")
+
+
+def small_cfg(tmp_path):
+    paths = replace(
+        BASE.paths, reports_dir=tmp_path / "reports", artifacts_dir=tmp_path / "artifacts"
+    )
+    return replace(BASE, paths=paths, cv_folds=2, final=Final("lgbm", "sigmoid"))
+
+
+@pytest.fixture(scope="module")
+def clients():
+    # Samples of the cleaned raw data stand in for train and test (the split is not read).
+    rows = clean(load_raw(BASE)).sample(1200, random_state=0)
+    return rows.iloc[:1000], rows.iloc[1000:].drop(columns=TARGET)
+
+
+@pytest.fixture(scope="module")
+def model(clients, tmp_path_factory):
+    train, _ = clients
+    return train_final(small_cfg(tmp_path_factory.mktemp("m")), train)
+
+
+@pytest.fixture
+def row(clients):
+    """One client with a hand-set history: a negative bill in month 3, all 1 month late."""
+    _, test = clients
+    one = test.iloc[[0]].copy()
+    bills = [1000.0, 2000.0, -500.0, 4000.0, 5000.0, 6000.0]
+    one[[f"BILL_AMT{i}" for i in range(1, 7)]] = bills
+    one[[f"PAY_AMT{i}" for i in range(1, 7)]] = [11.0, 12.0, 13.0, 14.0, 15.0, 16.0]
+    one[[f"PAY_{i}" for i in range(1, 7)]] = 1
+    one[["LIMIT_BAL", "AGE", "SEX", "EDUCATION", "MARRIAGE"]] = [50000.0, 30, 2, 2, 1]
+    return one
+
+
+def test_cutoff_for_five_to_one_is_one_sixth():
+    assert cutoff_for(5) == pytest.approx(1 / 6)
+    assert cutoff_for(1) == pytest.approx(0.5)
+
+
+def test_is_flagged_at_the_cutoff():
+    # >=, as in the saved model's predict and decision_metrics.
+    assert is_flagged(0.2, 0.2)
+    assert not is_flagged(0.19, 0.2)
+
+
+def test_prediction_headline_names_the_decision():
+    assert prediction_headline(0.2, 0.2) == "Predicted to default: flag for review"
+    assert prediction_headline(0.19, 0.2) == "Predicted to pay: don't flag"
+
+
+def test_change_from_original_in_percentage_points():
+    assert change_from_original(0.224, 0.345) == "▲ 12.1 points from the original 22.4%"
+    assert change_from_original(0.345, 0.224) == "▼ 12.1 points from the original 34.5%"
+    assert change_from_original(0.3, 0.3) == "No change from the original 30.0%"
+
+
+def test_widen_includes_the_clients_own_value():
+    assert widen(10, 20, 15) == (10, 20)
+    assert widen(10, 20, 25) == (10, 25)
+    assert widen(10, 20, 5) == (5, 20)
+
+
+def test_nearest_to_median_picks_the_middle_client_and_skips_empty_groups():
+    proba = np.array([0.9, 0.8, 0.6, 0.1])
+    assert nearest_to_median(proba, np.array([True, True, True, False])) == 1
+    assert nearest_to_median(proba, np.zeros(4, dtype=bool)) is None
+
+
+def test_example_clients_are_each_in_their_group():
+    y = np.array([1, 1, 1, 1, 0, 0, 0, 0, 0])
+    proba = np.array([0.9, 0.8, 0.6, 0.2, 0.7, 0.55, 0.3, 0.1, 0.2])
+    picks = example_clients(y, proba, 0.5)
+    assert set(picks) == set(EXAMPLE_LABELS) == {"caught", "missed", "false_alarm", "cleared"}
+    assert picks["caught"] == 1  # 0.8 is the median of 0.9, 0.8, 0.6
+    assert y[picks["missed"]] == 1 and proba[picks["missed"]] < 0.5
+    assert y[picks["false_alarm"]] == 0 and proba[picks["false_alarm"]] >= 0.5
+    assert y[picks["cleared"]] == 0 and proba[picks["cleared"]] < 0.5
+
+
+def test_example_clients_skip_an_empty_group():
+    picks = example_clients(np.zeros(4, dtype=int), np.array([0.1, 0.2, 0.7, 0.9]), 0.5)
+    assert set(picks) == {"false_alarm", "cleared"}
+
+
+def test_status_labels():
+    assert [status_label(c) for c in (-2, -1, 0, 1, 2)] == [
+        "No card use",
+        "Paid in full",
+        "Paid the minimum",
+        "1 month late",
+        "2 months late",
+    ]
+
+
+def test_describe_client_in_plain_words(row):
+    table = describe_client(row).set_index("Detail")["Value"]
+    assert table["Credit limit"] == "50,000 NT$"
+    assert table["Age"] == "30"
+    assert table["Sex"] == "Female"
+    assert table["Education"] == "University"
+    assert table["Marital status"] == "Married"
+    # The repayment status is in the payment history, so it is not repeated here.
+    assert "Most recent payment" not in table.index
+
+
+def test_payment_history_has_six_months_newest_first(row):
+    history = payment_history(row)
+    assert history["Month"].tolist() == MONTHS
+    assert MONTHS[0] == "Sep 2005"
+    assert history["Status"].iloc[0] == "1 month late"
+    assert history["Bill (NT$)"].iloc[2] == "-500"
+    assert history["Payment (NT$)"].iloc[0] == "11"
+
+
+def test_plain_labels_cover_every_model_column(model, clients):
+    _, test = clients
+    columns = inner_pipeline(model)[:-1].transform(test.head(2)).columns
+    assert set(columns) == set(PLAIN_LABELS)
+
+
+STATUS = [f"PAY_{i}" for i in range(1, 7)]
+PAID = [f"PAY_AMT{i}" for i in range(1, 7)]
+BILLS = [f"BILL_AMT{i}" for i in range(1, 7)]
+
+
+def values(frame, columns):
+    return frame[columns].iloc[0].tolist()
+
+
+def test_scenario_names():
+    assert SCENARIOS == (
+        "As recorded",
+        "Pays in full every month",
+        "Pays the minimum every month",
+        "Fell 2 months behind",
+    )
+
+
+def test_as_recorded_changes_nothing(row):
+    assert apply_scenario(row, "As recorded").equals(row)
+
+
+def test_pays_in_full(row):
+    # Each month pays the previous month's bill; the -500 bill (credit) gives 0, not -500.
+    out = apply_scenario(row, "Pays in full every month")
+    assert values(out, STATUS) == [-1] * 6
+    assert values(out, PAID) == [2000, 0, 4000, 5000, 6000, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_pays_the_minimum(row):
+    out = apply_scenario(row, "Pays the minimum every month")
+    assert values(out, STATUS) == [0] * 6
+    assert values(out, PAID) == [120, 0, 240, 300, 360, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_fell_two_months_behind(row):
+    out = apply_scenario(row, "Fell 2 months behind")
+    assert values(out, STATUS) == [2, 2, 1, 1, 1, 1]
+    assert values(out, PAID) == [80, 0, 13, 14, 15, 16]
+    assert values(out, BILLS) == values(row, BILLS)
+
+
+def test_scenarios_leave_the_input_row_unchanged(row):
+    before = row.copy()
+    for scenario in SCENARIOS:
+        apply_scenario(row, scenario)
+    assert row.equals(before)
+
+
+def test_unknown_scenario_is_refused(row):
+    with pytest.raises(ValueError, match="Unknown scenario"):
+        apply_scenario(row, "Pays twice")
+
+
+def test_edit_client_with_the_recorded_values_is_not_an_edit(row):
+    same = {c: int(row[c].iloc[0]) for c in ("SEX", "EDUCATION", "MARRIAGE", "AGE")}
+    edited = edit_client(row, "As recorded", float(row["LIMIT_BAL"].iloc[0]), same)
+    assert not is_edited(row, edited)
+
+
+def test_edit_client_sets_the_limit_and_demographics(row):
+    edited = edit_client(
+        row, "Pays in full every month", 120000, {"SEX": 1, "EDUCATION": 3, "AGE": 45}
+    )
+    assert edited["LIMIT_BAL"].iloc[0] == 120000
+    assert values(edited, ["SEX", "EDUCATION", "MARRIAGE", "AGE"]) == [1, 3, 1, 45]
+    assert values(edited, STATUS) == [-1] * 6
+    assert is_edited(row, edited)
+
+
+def test_edit_client_refuses_other_columns(row):
+    with pytest.raises(ValueError, match="BILL_AMT1"):
+        edit_client(row, "As recorded", 50000, {"BILL_AMT1": 0})
+
+
+def test_score_client_matches_predict_proba(model, row):
+    assert score_client(model, row) == pytest.approx(model.predict_proba(row)[0, 1])
+
+
+def test_top_contributions_are_the_largest_in_plain_words(model, row):
+    table = top_contributions(model, row, n=8)
+    assert len(table) == 8
+    assert table["label"].notna().all()
+    sizes = table["shap"].abs().to_numpy()
+    assert (np.diff(sizes) <= 0).all()  # largest first
+    raises = table["shap"] > 0
+    assert (table.loc[raises, "direction"] == "Raises risk").all()
+    assert (table.loc[~raises, "direction"] == "Lowers risk").all()
+
+
+def test_plot_contributions_is_a_bar_chart(model, row):
+    spec = plot_contributions(top_contributions(model, row)).to_dict()
+    assert spec["mark"]["type"] == "bar"
+
+
+def test_outcomes_at_ratio_match_decision_metrics():
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 400)
+    y = (rng.uniform(0, 1, 400) < proba).astype(int)
+    table = outcomes_at_ratio(y, proba, ratio=4).set_index("setup")
+    assert table.index.tolist() == ["This cutoff", "Cutoff 0.5", "Flag nobody"]
+    costs = Costs(false_negative=4.0, false_positive=1.0)
+    expected = decision_metrics(y, proba, 0.2, costs)
+    assert table.loc["This cutoff", "cutoff"] == pytest.approx(0.2)
+    assert table.loc["This cutoff", "caught"] == expected["caught"]
+    assert table.loc["This cutoff", "cost_per_client"] == pytest.approx(expected["expected_cost"])
+    assert table.loc["Cutoff 0.5", "cutoff"] == 0.5
+    nobody = table.loc["Flag nobody"]
+    assert np.isnan(nobody["cutoff"])
+    assert (nobody["caught"], nobody["false_alarms"]) == (0, 0)
+    assert nobody["missed"] == y.sum()
+    assert nobody["cost_per_client"] == pytest.approx(4.0 * y.mean())
+
+
+@pytest.fixture(scope="module")
+def assets():
+    # The committed model and the real test split, as the app loads them. Reading the
+    # test set here is allowed: the app is one of its readers (project spec, 2026-10-14).
+    return load_assets(BASE)
+
+
+def test_load_assets_matches_make_evaluate(assets):
+    assert len(assets.test_X) == 6000
+    assert TARGET not in assets.test_X.columns
+    assert assets.test_X.index.tolist() == list(range(6000))
+    assert assets.proba.shape == (6000,)
+    assert assets.saved_cutoff == pytest.approx(0.1697, abs=1e-3)
+    # Same clients and probabilities as reports/tables/test_metrics.csv.
+    flagged = assets.proba >= assets.saved_cutoff
+    assert flagged.sum() == 2666
+    assert (flagged & (assets.test_y == 1)).sum() == 1016
+
+
+def test_load_assets_ranges_come_from_train(assets):
+    ranges = assets.ranges
+    assert (ranges.limit_min, ranges.limit_max) == (10000, 500000)
+    assert (ranges.age_min, ranges.age_max) == (21, 79)
+
+
+def test_load_assets_examples_are_in_their_groups(assets):
+    assert set(assets.examples) == {"caught", "missed", "false_alarm", "cleared"}
+    flagged = assets.proba >= assets.saved_cutoff
+    y = assets.test_y
+    assert y[assets.examples["caught"]] == 1 and flagged[assets.examples["caught"]]
+    assert y[assets.examples["missed"]] == 1 and not flagged[assets.examples["missed"]]
+    assert y[assets.examples["false_alarm"]] == 0 and flagged[assets.examples["false_alarm"]]
+    assert y[assets.examples["cleared"]] == 0 and not flagged[assets.examples["cleared"]]
+
+
+def test_compare_details_shows_recorded_and_changed_values(row):
+    edited = edit_client(row, "As recorded", 80_000, {"SEX": 1})
+    table = compare_details(row, edited).set_index("Detail")
+    assert list(table.columns) == ["Recorded", "With your changes"]
+    assert table.loc["Credit limit"].tolist() == ["50,000 NT$", "80,000 NT$"]
+    assert table.loc["Sex"].tolist() == ["Female", "Male"]
+    assert table.loc["Age", "Recorded"] == table.loc["Age", "With your changes"]
+
+
+def test_compare_history_keeps_one_bill_column(row):
+    edited = edit_client(row, "Pays in full every month", 50_000, {})
+    table = compare_history(row, edited)
+    assert list(table.columns) == [
+        "Month",
+        "Bill (NT$)",
+        "Status: recorded",
+        "Status: with your changes",
+        "Payment (NT$): recorded",
+        "Payment (NT$): with your changes",
+    ]
+    assert table["Status: recorded"].iloc[0] == "1 month late"
+    assert table["Status: with your changes"].iloc[0] == "Paid in full"
+
+
+def test_change_styles_marks_only_changed_cells(row):
+    edited = edit_client(row, "As recorded", 80_000, {})
+    styles = change_styles(compare_details(row, edited))
+    marked = styles["With your changes"] != ""
+    # Only the credit limit changed, so only its "with your changes" cell is marked.
+    assert marked.tolist() == [True, False, False, False, False]
+    assert (styles.drop(columns="With your changes") == "").all().all()
+    assert set(CHANGED_COLUMNS) >= {"With your changes", "Status: with your changes"}

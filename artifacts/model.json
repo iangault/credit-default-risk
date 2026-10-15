@@ -1,0 +1,16 @@
+{
+  "experiment": {
+    "name": "lgbm",
+    "model": "lgbm",
+    "params": {},
+    "sampler": null,
+    "features": []
+  },
+  "calibration": "sigmoid",
+  "false_negative": 5.0,
+  "false_positive": 1.0,
+  "seed": 573,
+  "cv_folds": 5,
+  "test_size": 0.2,
+  "sample_rows": null
+}

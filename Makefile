@@ -13,7 +13,7 @@ DIM := \033[2m
 RESET := \033[0m
 endif
 
-.PHONY: help setup lint format test data split experiments decide train evaluate explain all smoke
+.PHONY: help setup lint format test data split experiments decide train evaluate explain app all smoke
 .NOTPARALLEL:
 
 help:
@@ -45,6 +45,9 @@ help:
 	@printf "%b\n" "                      writes reports/tables/test_metrics.csv, calibration and ROC/PR plots"
 	@printf "%b\n" "  $(YELLOW)make explain$(RESET)      - SHAP figures for the test set and two example clients"
 	@printf "%b\n" ""
+	@printf "%b\n" "$(CYAN)Step 5 - Showcase app:$(RESET)"
+	@printf "%b\n" "  $(YELLOW)make app$(RESET)          - Run the Streamlit app locally (app/app.py)"
+	@printf "%b\n" ""
 	@printf "%b\n" "$(CYAN)Run everything:$(RESET)"
 	@printf "%b\n" "  $(YELLOW)make all$(RESET)          - Run every step in order (data through explain)"
 	@printf "%b\n" "  $(YELLOW)make smoke$(RESET)        - Run every step on a 1,000-row sample (what CI runs)"
@@ -61,6 +64,7 @@ help:
 	@printf "%b\n" "  $(GREEN)8 decision.py$(RESET)     - Calibrate, tune threshold to costs, save model"
 	@printf "%b\n" "  $(GREEN)9 evaluate.py$(RESET)     - Test-set metrics, comparisons, calibration and ROC/PR plots"
 	@printf "%b\n" "  $(GREEN)10 explain.py$(RESET)     - SHAP summary and example clients"
+	@printf "%b\n" "  $(GREEN)11 showcase.py$(RESET)    - Logic behind the Streamlit app (app/app.py)"
 	@printf "%b\n" "  $(GREEN)cli.py$(RESET)            - The credit-risk command; make targets call it"
 	@printf "%b\n" ""
 	@printf "%b\n" "$(DIM)Override the config with CONFIG=path, e.g. make all CONFIG=configs/smoke.yaml$(RESET)"
@@ -132,6 +136,11 @@ explain:
 	@printf "%b\n" "$(CYAN)Explaining the saved model's test predictions with SHAP...$(RESET)"
 	$(RUN) explain
 	@printf "%b\n" "$(GREEN)Explanations complete.$(RESET)"
+
+# Runs in the foreground until Ctrl+C. Uses the committed model, so no other step is needed.
+app:
+	@printf "%b\n" "$(CYAN)Starting the Streamlit app (Ctrl+C to stop)...$(RESET)"
+	streamlit run app/app.py
 
 # ─── Run everything ──────────────────────────────────────────────────────────
 

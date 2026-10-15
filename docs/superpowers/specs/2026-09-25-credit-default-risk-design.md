@@ -62,9 +62,10 @@ ROC-AUC. A technique that does not help is a valid, reported result.
   clone with no manual steps.
 - GitHub Actions runs `ruff` and `pytest` (including a smoke test of
   the full pipeline on a small sample) on every push and passes.
-- The test set is read only by `evaluate` and `explain` (changed in
-  M6). Neither changes the model, and no setting is changed after
-  seeing their output.
+- The test set is read only by `evaluate`, `explain` and the
+  Streamlit app (changed in M6, and on 2026-10-14 for the app). None
+  of them changes the model, and no setting is changed after seeing
+  their output.
 - The experiments table compares each technique against the same
   baseline under the same CV folds.
 - README lets a reader understand the problem, headline results, and

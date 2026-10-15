@@ -8,12 +8,15 @@ dependencies:
   - python=3.12
   - pandas>=2.2
   - pyyaml>=6.0
-  - scikit-learn>=1.5
+  # Pinned exactly: artifacts/model.joblib was saved with these versions, and a saved
+  # model can fail or change behavior when loaded with others. Retrain to upgrade.
+  - scikit-learn=1.9.1
   - imbalanced-learn>=0.12   # resamplers (SMOTE, SMOTENC, undersampling) and a Pipeline that runs them only during fit
   - pyarrow>=15
-  - lightgbm>=4
+  - lightgbm=4.7.0
   - xgboost>=2
   - shap>=0.50             # SHAP explanations of the final model (make explain)
+  - streamlit=1.65.0       # the app in app/ (make app); same version as app/requirements.txt
   - matplotlib-base>=3.8   # draws the SHAP plots; the other charts use altair
   - jupyterlab>=4
   - altair>=5

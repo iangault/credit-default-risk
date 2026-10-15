@@ -7,5 +7,11 @@ __pycache__/
 .DS_Store
 
 data/processed/
-artifacts/
+# Saved models are ignored, except the final one: the Streamlit app loads it, and
+# retraining on the app's free host would make its slow start slower. model.json goes
+# with it, since load_model checks it to refuse a model that no longer matches the
+# config. `artifacts/*` (not `artifacts/`) so the two `!` lines can take effect.
+artifacts/*
+!artifacts/model.joblib
+!artifacts/model.json
 reports/smoke/

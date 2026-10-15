@@ -48,6 +48,7 @@ make setup                # create the conda env from environment.yml, install g
 conda activate credit-risk
 make test                 # run the test suite
 make all                  # run the pipeline end to end
+make app                  # run the Streamlit app locally (uses the committed model)
 ```
 
 Each stage can also be run on its own (`make data`, `make split`, ...). Use a different
@@ -81,6 +82,7 @@ The modules in `src/credit_risk/`, in the order the pipeline uses them:
 | 8 | `decision.py` | Calibrate a setup, tune its threshold to the error costs, compare candidates, save the final model | `make decide`, `make train` |
 | 9 | `evaluate.py` | Score the saved model on the test set; compare with 0.5, baselines and the train estimate | `make evaluate` |
 | 10 | `explain.py` | SHAP values for the saved model; beeswarm and two example clients | `make explain` |
+| 11 | `showcase.py` | The logic behind the Streamlit app (`app/app.py`): example clients, payment scenarios, scoring, test-set counts | `make app` |
 | | `cli.py` | The `credit-risk` command; runs one stage at a time | |
 
 `make` targets call the `credit-risk` command, which calls the modules. Run `make help`
@@ -108,7 +110,7 @@ for the list of targets.
 
 ## What the tests check
 
-`make test` runs the suite (about 210 tests; many are one test run over several inputs).
+`make test` runs the suite (about 280 tests; many are one test run over several inputs).
 The tests check the code, not the model's quality: each one feeds a function an input
 with a known right answer, often a small made-up one, and checks the result.
 
@@ -128,6 +130,9 @@ with a known right answer, often a small made-up one, and checks the result.
 | `test_evaluate.py` | Metrics match a hand-worked example; baselines cost what arithmetic says; the train estimate is read correctly or left blank |
 | `test_explain.py` | SHAP values add up to the model's score; plots show unscaled values; example clients follow the fixed rule; non-tree models are refused |
 | `test_cli.py` | Each `make` stage runs end to end on a small sample and prints readable errors |
+| `test_showcase.py` | Example clients fall in the right group; payment scenarios rewrite the right columns and never give a negative payment; recorded and changed values are compared cell by cell |
+| `test_app.py` | The Streamlit app starts, each tab renders, and each control changes what it should (run without a browser) |
+| `test_requirements.py` | The app's pinned scikit-learn and LightGBM versions match the ones the saved model was trained with |
 
 Why the tests use made-up inputs, and how pytest runs them, is explained in
 `docs/learning-log.md` (M2, "How the tests work").

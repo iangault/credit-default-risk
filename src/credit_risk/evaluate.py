@@ -58,6 +58,19 @@ COLUMNS = [
     "false_alarms",
 ]
 
+# Altair refuses charts with more than 5,000 rows, and a precision-recall curve has one
+# point per distinct score (up to one per client). 1,000 evenly spaced points look the
+# same at the size the curves are drawn.
+MAX_CURVE_POINTS = 1000
+
+
+def _thin(curve: pd.DataFrame, max_points: int = MAX_CURVE_POINTS) -> pd.DataFrame:
+    """At most `max_points` evenly spaced rows of `curve`, keeping the first and last."""
+    if len(curve) <= max_points:
+        return curve
+    keep = np.unique(np.linspace(0, len(curve) - 1, max_points).round().astype(int))
+    return curve.iloc[keep]
+
 
 def _outcome_metrics(y: np.ndarray, flagged: np.ndarray, costs: Costs) -> dict:
     """Recall, precision, cost and counts for a given set of flagged clients."""
@@ -206,7 +219,11 @@ def marked_thresholds(model: TunedThresholdClassifierCV, cfg: Config) -> pd.Data
 
 
 def plot_tradeoff_curves(
-    y: Sequence[int], proba: Sequence[float], marks: pd.DataFrame
+    y: Sequence[int],
+    proba: Sequence[float],
+    marks: pd.DataFrame,
+    points_note: str = "cutoffs tuned for each cost ratio, and 0.5",
+    colors: Sequence[str] | None = None,
 ) -> alt.HConcatChart:
     """ROC curve and precision-recall curve side by side, with the cutoffs in `marks`.
 
@@ -220,12 +237,18 @@ def plot_tradeoff_curves(
 
     The cost search in M5 picks one point on these curves for a given cost ratio; the
     markers show where those points fall and how far apart the ratios put them.
+
+    `points_note` says what the markers are, in the subtitle (the app marks one cutoff).
+    `colors`, one per row of `marks`, sets the marker colors; without it Altair picks
+    them (its first color is close to the curve's blue, which is fine for the report
+    figure but hard to follow when a marker moves in the app).
+    Curves are thinned to MAX_CURVE_POINTS points each.
     """
     y, proba = np.asarray(y), np.asarray(proba)
     fpr, tpr, _ = roc_curve(y, proba)
     precision, recall, _ = precision_recall_curve(y, proba)
-    roc = pd.DataFrame({"fpr": fpr, "tpr": tpr})
-    pr = pd.DataFrame({"recall": recall, "precision": precision})
+    roc = _thin(pd.DataFrame({"fpr": fpr, "tpr": tpr}))
+    pr = _thin(pd.DataFrame({"recall": recall, "precision": precision}))
 
     # Each marker is the test-set outcome of flagging clients at or above its cutoff
     # (`>=`, as in decision_metrics). Ties in proba can put a marker just off the line.
@@ -244,7 +267,13 @@ def plot_tradeoff_curves(
             }
         )
     points = pd.DataFrame(points)
-    color = alt.Color("label:N", title="Cutoff", sort=list(marks["label"]))
+    labels = list(marks["label"])
+    if colors is None:
+        color = alt.Color("label:N", title="Cutoff", sort=labels)
+    else:
+        color = alt.Color(
+            "label:N", title="Cutoff", scale=alt.Scale(domain=labels, range=list(colors))
+        )
     tooltip = ["label:N", alt.Tooltip("threshold:Q", format=".3f")]
 
     def panel(curve, x, x_title, y_field, y_title, baseline, title):
@@ -292,7 +321,7 @@ def plot_tradeoff_curves(
             "ROC and precision-recall curves on the test set",
             subtitle=(
                 "Dashed lines: random guessing (ROC) and the default rate, "
-                f"{default_rate:.0%} (PR). Points: cutoffs tuned for each cost ratio, and 0.5"
+                f"{default_rate:.0%} (PR). Points: {points_note}"
             ),
         )
     )
