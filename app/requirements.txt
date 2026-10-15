@@ -3,8 +3,9 @@
 # precedence. The app imports this repo's code from src/ directly (see app.py), so the
 # package itself is not installed here.
 #
-# Versions match the credit-risk conda env. scikit-learn and lightgbm must match the
-# versions artifacts/model.joblib was saved with; tests/test_requirements.py checks it.
+# Versions match the credit-risk conda env, except xgboost-cpu (see below).
+# scikit-learn and lightgbm must match the versions artifacts/model.joblib was saved
+# with; tests/test_requirements.py checks it.
 streamlit==1.65.0
 pandas==3.0.6
 numpy==2.5.3

@@ -185,7 +185,7 @@ and nothing else is shown from them.
 
 | Name | What it does |
 |---|---|
-| `Assets` | Dataclass: model, cfg, test features, test labels, test probabilities, slider ranges, example rows. |
+| `Assets` | Dataclass: model, saved cutoff, test features, test labels, test probabilities, slider ranges, example rows. |
 | `load_assets(cfg)` | Startup steps 2 to 6. |
 | `cutoff_for(ratio)` | 1 / (1 + ratio). |
 | `example_clients(y, proba, threshold)` | Row numbers for the four examples (median rule). |
