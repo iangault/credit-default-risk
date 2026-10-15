@@ -279,7 +279,10 @@ The author's click-through found the shared sidebar confusing and the client vie
 long to see the effect of a change. These replace the matching parts above:
 
 - **No sidebar.** The cost ratio control (a number box with − / + buttons, 1 to 20,
-  default 5) is at the top of the Cost ratio tab and affects only that tab.
+  default 5) is in a narrow left panel on the Cost ratio tab and affects only that
+  tab. The panel also shows defaulters caught, false alarms and cost per client (with
+  the difference from cutoff 0.5), and a CSS rule keeps it in view while the table and
+  charts scroll (on screens 640px or wider).
 - **Cost ratio markers:** the current cutoff in orange-red, and cutoff 0.5 in gray as a
   fixed reference (one marker at 1x, where the two are the same).
 - **Try a client uses the saved model's cutoff (0.170)**, the one that grouped the

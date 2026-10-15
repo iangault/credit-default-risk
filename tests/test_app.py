@@ -157,3 +157,16 @@ def test_unexpected_startup_error_shows_a_message(monkeypatch):
         assert "could not start" in at.error[0].value
     finally:
         st.cache_resource.clear()  # later tests load the real assets again
+
+
+def test_cost_panel_shows_the_key_numbers_and_follows_the_scroll(app):
+    # The panel on the left of the Cost ratio tab holds the ratio and three counts. A CSS
+    # rule makes its column sticky; AppTest has no browser, so the test checks the rule
+    # is on the page and the counts update, not the scrolling itself.
+    cost = tab(app, "Cost ratio")
+    labels = [m.label for m in cost.metric]
+    assert labels == ["Defaulters caught", "False alarms", "Cost per client"]
+    before = [m.value for m in cost.metric]
+    app.number_input(key="ratio").increment().run()
+    assert [m.value for m in tab(app, "Cost ratio").metric] != before
+    assert any("position: sticky" in m.value for m in app.markdown)

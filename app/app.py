@@ -221,52 +221,93 @@ with client_tab:
 
 # ---- Tab 3: Cost ratio -------------------------------------------------------------
 
+# Keeps the Cost ratio tab's left column (the ratio and its key numbers) in view while
+# the table and charts scroll past. Streamlit gives a container with key="ratio_panel"
+# the CSS class st-key-ratio_panel; :has() finds the column holding it. Only on screens
+# wide enough for side-by-side columns: on a phone they stack and a sticky panel would
+# cover the charts.
+STICKY_PANEL = """
+<style>
+@media (min-width: 640px) {
+  [data-testid="stColumn"]:has(.st-key-ratio_panel) {
+    position: sticky;
+    top: 4rem;
+    align-self: flex-start;
+  }
+}
+</style>
+"""
+
 with cost_tab:
-    # A number box with - / + buttons: each click moves the marker one step.
-    ratio = st.number_input(
-        "A missed defaulter costs N times a false alarm", 1, 20, 5, step=1, key="ratio"
-    )
-    cutoff = sc.cutoff_for(ratio)
-    st.markdown(f"Flag clients with a default risk of **{cutoff:.1%}** or more.")
-    st.caption(
-        "Cutoff = 1 / (1 + N), with a false alarm costing 1. The saved model's cutoff at "
-        f"5x came from a search on training data: {assets.saved_cutoff:.3f}. So counts "
-        "at 5x differ slightly from the write-up."
-    )
-    outcomes = sc.outcomes_at_ratio(assets.test_y, assets.proba, ratio)
-    defaulters = int(assets.test_y.sum())
-    payers = len(assets.test_y) - defaulters
-    st.subheader(f"All {len(assets.test_y):,} test clients at a {ratio}x cost ratio")
-    table = pd.DataFrame(
-        {
-            "Cutoff": ["none flagged" if pd.isna(c) else f"{c:.3f}" for c in outcomes["cutoff"]],
-            f"Defaulters caught (of {defaulters:,})": outcomes["caught"],
-            "Defaulters missed": outcomes["missed"],
-            f"False alarms (of {payers:,})": outcomes["false_alarms"],
-            "Cost per client": outcomes["cost_per_client"].round(3),
-        },
-    )
-    table.index = outcomes["setup"]
-    st.dataframe(table)
-    st.caption(f"Cost per client: a miss costs {ratio}, a false alarm costs 1, averaged.")
-    # The current cutoff in orange-red, and 0.5 in gray as a fixed reference (one dot
-    # at 1x, where the two are the same).
-    marks = pd.DataFrame({"label": [f"{ratio}x: cutoff {cutoff:.3f}"], "threshold": [cutoff]})
-    colors = [FLAG_COLOR]
-    if ratio != 1:
-        marks.loc[1] = ["cutoff 0.5", 0.5]
-        colors.append(REFERENCE_COLOR)
-    st.altair_chart(
-        plot_tradeoff_curves(
-            assets.test_y,
-            assets.proba,
-            marks,
-            points_note=f"the cutoff for {ratio}x, and 0.5",
-            colors=colors,
+    st.markdown(STICKY_PANEL, unsafe_allow_html=True)
+    panel, main = st.columns([1, 3], gap="large")
+
+    with panel, st.container(key="ratio_panel"):
+        # A number box with - / + buttons: each click moves the marker one step.
+        ratio = st.number_input(
+            "A missed defaulter costs N times a false alarm", 1, 20, 5, step=1, key="ratio"
         )
-    )
-    st.markdown(
-        "The model's probabilities stay the same when you move the slider. Only the line "
-        "drawn through them moves: a higher cost of a miss lowers the cutoff, so more "
-        "defaulters are caught and more clients who would have paid are flagged."
-    )
+        cutoff = sc.cutoff_for(ratio)
+        st.markdown(f"Flag clients with a default risk of **{cutoff:.1%}** or more.")
+        outcomes = sc.outcomes_at_ratio(assets.test_y, assets.proba, ratio)
+        defaulters = int(assets.test_y.sum())
+        payers = len(assets.test_y) - defaulters
+        now, at_half = outcomes.iloc[0], outcomes.iloc[1]  # this cutoff, cutoff 0.5
+        st.metric(
+            "Defaulters caught",
+            f"{int(now['caught']):,} ({now['caught'] / defaulters:.0%})",
+        )
+        st.metric(
+            "False alarms",
+            f"{int(now['false_alarms']):,} ({now['false_alarms'] / payers:.0%})",
+        )
+        # delta_color="inverse": a lower cost than cutoff 0.5 shows green.
+        st.metric(
+            "Cost per client",
+            f"{now['cost_per_client']:.3f}",
+            delta=f"{now['cost_per_client'] - at_half['cost_per_client']:+.3f} vs cutoff 0.5",
+            delta_color="inverse",
+        )
+        st.caption(
+            "Cutoff = 1 / (1 + N), with a false alarm costing 1. The saved model's cutoff "
+            f"at 5x came from a search on training data: {assets.saved_cutoff:.3f}. So "
+            "counts at 5x differ slightly from the write-up."
+        )
+
+    with main:
+        st.subheader(f"All {len(assets.test_y):,} test clients at a {ratio}x cost ratio")
+        table = pd.DataFrame(
+            {
+                "Cutoff": [
+                    "none flagged" if pd.isna(c) else f"{c:.3f}" for c in outcomes["cutoff"]
+                ],
+                f"Defaulters caught (of {defaulters:,})": outcomes["caught"],
+                "Defaulters missed": outcomes["missed"],
+                f"False alarms (of {payers:,})": outcomes["false_alarms"],
+                "Cost per client": outcomes["cost_per_client"].round(3),
+            },
+        )
+        table.index = outcomes["setup"]
+        st.dataframe(table)
+        st.caption(f"Cost per client: a miss costs {ratio}, a false alarm costs 1, averaged.")
+        # The current cutoff in orange-red, and 0.5 in gray as a fixed reference (one
+        # dot at 1x, where the two are the same).
+        marks = pd.DataFrame({"label": [f"{ratio}x: cutoff {cutoff:.3f}"], "threshold": [cutoff]})
+        colors = [FLAG_COLOR]
+        if ratio != 1:
+            marks.loc[1] = ["cutoff 0.5", 0.5]
+            colors.append(REFERENCE_COLOR)
+        st.altair_chart(
+            plot_tradeoff_curves(
+                assets.test_y,
+                assets.proba,
+                marks,
+                points_note=f"the cutoff for {ratio}x, and 0.5",
+                colors=colors,
+            )
+        )
+        st.markdown(
+            "The model's probabilities stay the same when you change the ratio. Only the "
+            "line drawn through them moves: a higher cost of a miss lowers the cutoff, so "
+            "more defaulters are caught and more clients who would have paid are flagged."
+        )
