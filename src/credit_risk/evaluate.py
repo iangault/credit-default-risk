@@ -223,6 +223,7 @@ def plot_tradeoff_curves(
     proba: Sequence[float],
     marks: pd.DataFrame,
     points_note: str = "cutoffs tuned for each cost ratio, and 0.5",
+    colors: Sequence[str] | None = None,
 ) -> alt.HConcatChart:
     """ROC curve and precision-recall curve side by side, with the cutoffs in `marks`.
 
@@ -238,6 +239,9 @@ def plot_tradeoff_curves(
     markers show where those points fall and how far apart the ratios put them.
 
     `points_note` says what the markers are, in the subtitle (the app marks one cutoff).
+    `colors`, one per row of `marks`, sets the marker colors; without it Altair picks
+    them (its first color is close to the curve's blue, which is fine for the report
+    figure but hard to follow when a marker moves in the app).
     Curves are thinned to MAX_CURVE_POINTS points each.
     """
     y, proba = np.asarray(y), np.asarray(proba)
@@ -263,7 +267,13 @@ def plot_tradeoff_curves(
             }
         )
     points = pd.DataFrame(points)
-    color = alt.Color("label:N", title="Cutoff", sort=list(marks["label"]))
+    labels = list(marks["label"])
+    if colors is None:
+        color = alt.Color("label:N", title="Cutoff", sort=labels)
+    else:
+        color = alt.Color(
+            "label:N", title="Cutoff", scale=alt.Scale(domain=labels, range=list(colors))
+        )
     tooltip = ["label:N", alt.Tooltip("threshold:Q", format=".3f")]
 
     def panel(curve, x, x_title, y_field, y_title, baseline, title):

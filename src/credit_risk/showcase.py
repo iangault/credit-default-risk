@@ -140,6 +140,23 @@ def is_flagged(proba: float, cutoff: float) -> bool:
     return proba >= cutoff
 
 
+def prediction_headline(proba: float, cutoff: float) -> str:
+    """The decision in plain words, for the colored box on the Try a client tab."""
+    if is_flagged(proba, cutoff):
+        return "Predicted to default: flag for review"
+    return "Predicted to pay: don't flag"
+
+
+def change_from_original(before: float, after: float) -> str:
+    """How far the edits moved the probability, in percentage points (22.4% -> 34.5%
+    is 12.1 points). Points rather than a percent change, which reads as a ratio."""
+    points = round((after - before) * 100, 1)
+    if points == 0:
+        return f"No change from the original {before:.1%}"
+    arrow = "▲" if points > 0 else "▼"
+    return f"{arrow} {abs(points):.1f} points from the original {before:.1%}"
+
+
 def widen(low: int, high: int, value: int) -> tuple[int, int]:
     """A slider range that also includes `value`, e.g. a client above the usual range."""
     return min(low, value), max(high, value)

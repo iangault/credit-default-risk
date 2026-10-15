@@ -214,3 +214,15 @@ def test_tradeoff_curves_subtitle_names_the_points():
     assert "cutoffs tuned for each cost ratio, and 0.5" in default
     custom = plot_tradeoff_curves(y, proba, marks, points_note="the current cutoff")
     assert "Points: the current cutoff" in custom.to_dict()["title"]["subtitle"]
+
+
+def test_tradeoff_curves_can_color_each_marker():
+    # The app colors the current cutoff so it stands out from the blue curve, and 0.5 gray.
+    rng = np.random.default_rng(0)
+    proba = rng.uniform(0, 1, 200)
+    y = (rng.uniform(0, 1, 200) < proba).astype(int)
+    marks = pd.DataFrame({"label": ["now", "0.5"], "threshold": [0.2, 0.5]})
+    spec = plot_tradeoff_curves(y, proba, marks, colors=["#e4572e", "#7f7f7f"]).to_dict()
+    dots = spec["hconcat"][0]["layer"][2]
+    scale = dots["encoding"]["color"]["scale"]
+    assert scale == {"domain": ["now", "0.5"], "range": ["#e4572e", "#7f7f7f"]}

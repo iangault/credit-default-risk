@@ -21,46 +21,78 @@ def app():
     return at
 
 
-def sidebar_text(at) -> str:
-    return " ".join(m.value for m in at.sidebar.markdown)
+def tab(at, label):
+    return next(t for t in at.tabs if t.label == label)
 
 
-def probability(at) -> str:
-    return at.metric[0].value
+def cost_text(at) -> str:
+    return " ".join(m.value for m in tab(at, "Cost ratio").markdown)
 
 
-def test_app_starts_with_three_tabs(app):
-    assert [tab.label for tab in app.tabs] == ["About", "Try a client", "Cost ratio"]
-    assert "16.7%" in sidebar_text(app)  # default ratio 5: cutoff 1/6
+def prediction(at) -> str:
+    """The colored prediction box: red (st.error) if flagged, green (st.success) if not."""
+    boxes = [b.value for b in tab(at, "Try a client").error]
+    boxes += [b.value for b in tab(at, "Try a client").success]
+    assert len(boxes) == 1, boxes
+    return boxes[0]
 
 
-def test_moving_the_slider_changes_the_cutoff(app):
-    app.slider(key="ratio").set_value(2).run()
+def test_app_starts_with_three_tabs_and_no_sidebar(app):
+    assert [t.label for t in app.tabs] == ["About", "Try a client", "Cost ratio"]
+    assert len(app.sidebar.children) == 0
+    assert "16.7%" in cost_text(app)  # default ratio 5: cutoff 1/6
+
+
+def test_clicking_the_ratio_up_and_down_changes_the_cutoff(app):
+    app.number_input(key="ratio").increment().run()
+    assert "14.3%" in cost_text(app)  # ratio 6: 1/7
+    app.number_input(key="ratio").set_value(2).run()
     assert not app.exception
-    assert "33.3%" in sidebar_text(app)
+    assert "33.3%" in cost_text(app)
 
 
-def test_each_example_client_shows_a_probability(app):
-    for key in ("caught", "missed", "false_alarm", "cleared"):
-        app.button(key=f"example_{key}").click().run()
+def test_ratio_of_one_draws_one_marker(app):
+    # At 1x the cutoff is 0.5, the same as the gray reference, so only one dot is drawn.
+    app.number_input(key="ratio").set_value(1).run()
+    assert not app.exception
+
+
+def test_each_example_client_shows_a_colored_prediction(app):
+    expected = {
+        "caught": "Predicted to default",
+        "missed": "Predicted to pay",
+        "false_alarm": "Predicted to default",
+        "cleared": "Predicted to pay",
+    }
+    for key, headline in expected.items():
+        app.radio(key="pick").set_value(key).run()
         assert not app.exception
-        assert probability(app).endswith("%")
+        assert headline in prediction(app)
+        assert "%" in prediction(app)
+
+
+def test_client_tab_uses_the_saved_cutoff_whatever_the_ratio(app):
+    # The cost ratio control only affects the Cost ratio tab.
+    app.number_input(key="ratio").set_value(20).run()
+    app.radio(key="pick").set_value("cleared").run()
+    assert "Predicted to pay" in prediction(app)
+    assert "17.0%" in prediction(app)  # the saved model's cutoff, 0.1697
 
 
 def test_changing_payment_behavior_changes_the_probability(app):
-    app.button(key="example_caught").click().run()
-    before = probability(app)
-    app.selectbox(key="scenario").set_value("Pays in full every month").run()
+    app.radio(key="pick").set_value("caught").run()
+    before = prediction(app)
+    app.radio(key="scenario").set_value("Pays in full every month").run()
     assert not app.exception
-    assert probability(app) != before
-    assert any("Your changes moved" in m.value for m in app.markdown)
+    assert prediction(app) != before
+    assert any("points from the original" in m.value for m in app.markdown)
 
 
 def test_picking_another_client_resets_the_controls(app):
-    app.selectbox(key="scenario").set_value("Pays in full every month").run()
-    app.button(key="example_missed").click().run()
-    assert app.selectbox(key="scenario").value == "As recorded"
-    assert not any("Your changes moved" in m.value for m in app.markdown)
+    app.radio(key="scenario").set_value("Pays in full every month").run()
+    app.radio(key="pick").set_value("missed").run()
+    assert app.radio(key="scenario").value == "As recorded"
+    assert not any("points from the original" in m.value for m in app.markdown)
 
 
 def test_fairness_controls_run(app):
@@ -71,14 +103,21 @@ def test_fairness_controls_run(app):
 
 
 def test_reset_button_restores_the_client(app):
-    app.selectbox(key="scenario").set_value("Fell 2 months behind").run()
+    app.radio(key="scenario").set_value("Fell 2 months behind").run()
     app.button(key="reset").click().run()
-    assert app.selectbox(key="scenario").value == "As recorded"
+    assert app.radio(key="scenario").value == "As recorded"
 
 
-def test_random_client_runs(app):
+def test_random_client_clears_the_example_choice(app):
     app.button(key="random").click().run()
     assert not app.exception
+    assert app.radio(key="pick").value is None
+    assert prediction(app)
+
+
+def test_client_details_are_in_a_collapsed_section(app):
+    labels = [e.label for e in tab(app, "Try a client").expander]
+    assert "Client details and payment history" in labels
 
 
 def test_client_above_the_limit_range_renders(app):
@@ -97,14 +136,6 @@ def test_client_above_the_limit_range_renders(app):
     assert not app.exception
     assert app.slider(key="limit").value == limit
     assert app.slider(key="limit").max == limit
-
-
-def test_examples_say_which_cutoff_grouped_them(app):
-    # The examples are grouped at the saved 5x cutoff; at other ratios the decision shown
-    # can differ from the group name, so the app says so next to the buttons.
-    app.slider(key="ratio").set_value(20).run()
-    app.button(key="example_cleared").click().run()
-    assert any("grouped at the saved model's cutoff" in c.value for c in app.caption)
 
 
 def test_unexpected_startup_error_shows_a_message(monkeypatch):

@@ -272,3 +272,22 @@ control, and share screenshots with the author.
 - A full 23-column input form.
 - Fairness metrics by group, and retraining without demographics.
 - Any change to the model or its cutoff.
+
+## Revision after the manual check (2026-10-14)
+
+The author's click-through found the shared sidebar confusing and the client view too
+long to see the effect of a change. These replace the matching parts above:
+
+- **No sidebar.** The cost ratio control (a number box with − / + buttons, 1 to 20,
+  default 5) is at the top of the Cost ratio tab and affects only that tab.
+- **Cost ratio markers:** the current cutoff in orange-red, and cutoff 0.5 in gray as a
+  fixed reference (one marker at 1x, where the two are the same).
+- **Try a client uses the saved model's cutoff (0.170)**, the one that grouped the
+  examples, so each example's decision matches its name.
+- **Colored prediction:** a red box ("Predicted to default: flag for review") or a green
+  one ("Predicted to pay: don't flag") with the probability, and the change from the
+  original in percentage points.
+- **Shorter controls:** the examples are one list plus a random button; payment
+  behavior is a set of radio buttons. Client details and payment history move into a
+  collapsed section below both columns, so the controls and the result fit on one
+  screen.

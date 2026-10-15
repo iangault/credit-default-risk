@@ -7,6 +7,9 @@ Run locally with `make app`; deployed on Streamlit Community Cloud (app/requirem
 Streamlit runs this whole file again after every click. Values that must survive a
 rerun (which client is shown, the control values) live in st.session_state; the model
 and data are loaded once per app process with st.cache_resource.
+
+The two views are kept apart: Try a client uses the saved model's own cutoff, and only
+the Cost ratio tab lets the visitor change what a miss costs.
 """
 
 from __future__ import annotations
@@ -73,12 +76,19 @@ def reset_controls() -> None:
 
 def show_example(key: str) -> None:
     st.session_state.client = assets.examples[key]
+    st.session_state.pick = key  # the example list shows which one is selected
     st.session_state.shown = sc.EXAMPLE_LABELS[key]
     reset_controls()
 
 
+def show_picked() -> None:
+    """Called when the example list changes (on_change)."""
+    show_example(st.session_state.pick)
+
+
 def show_random() -> None:
     st.session_state.client = int(np.random.default_rng().integers(len(assets.test_X)))
+    st.session_state.pick = None  # no example selected in the list
     st.session_state.shown = "A random test client"
     reset_controls()
 
@@ -87,19 +97,10 @@ def show_random() -> None:
 if "client" not in st.session_state:
     show_example(next(iter(assets.examples)))
 
-
-# ---- Sidebar: the cost ratio, shared by both views ---------------------------------
-
-with st.sidebar:
-    st.header("Cost of mistakes")
-    ratio = st.slider("A missed defaulter costs N times a false alarm", 1, 20, 5, key="ratio")
-    cutoff = sc.cutoff_for(ratio)
-    st.markdown(f"Flag clients with a default risk of **{cutoff:.1%}** or more.")
-    st.caption(
-        "Cutoff = 1 / (1 + N), with a false alarm costing 1. The saved model's cutoff at "
-        f"5x came from a search on training data: {assets.saved_cutoff:.3f}. So counts "
-        "at 5x differ slightly from the write-up."
-    )
+# The cutoff that sorted the examples into their groups, so each example's decision
+# matches its group name.
+CLIENT_CUTOFF = assets.saved_cutoff
+FLAG_COLOR, REFERENCE_COLOR = "#e4572e", "#7f7f7f"  # orange-red stands out from the blue curve
 
 about, client_tab, cost_tab = st.tabs(["About", "Try a client", "Cost ratio"])
 
@@ -119,9 +120,9 @@ with about:
         "about 0.17, not the usual 0.5.\n"
         "- **The result:** on 6,000 clients the model never saw, it caught 77% of "
         "defaulters, and the cost per client was 29% lower than with a 0.5 cutoff.\n\n"
-        "**Try a client** lets you pick a real client and change a few things. "
-        "**Cost ratio** shows what the cutoff does across all 6,000 clients. The slider "
-        "on the left sets how much a miss costs, for both.\n\n"
+        "**Try a client** lets you pick a real client, change a few things, and see the "
+        "model's prediction at its saved cutoff. **Cost ratio** lets you change how much "
+        "a miss costs and shows what the cutoff then does across all 6,000 clients.\n\n"
         f"[Code on GitHub]({REPO}) · [Full write-up]({RESULTS})"
     )
 
@@ -134,18 +135,20 @@ with client_tab:
 
     with left:
         st.subheader("Pick a test client")
-        for key, label in sc.EXAMPLE_LABELS.items():
-            if key in assets.examples:
-                st.button(label, key=f"example_{key}", on_click=show_example, args=(key,))
+        # One list instead of a button per example keeps the controls short enough to
+        # sit beside the result. Its value is None after "random" (nothing selected).
+        st.radio(
+            "Example clients",
+            [key for key in sc.EXAMPLE_LABELS if key in assets.examples],
+            format_func=sc.EXAMPLE_LABELS.get,
+            key="pick",
+            on_change=show_picked,
+        )
         st.button("A random test client", key="random", on_click=show_random)
         st.caption(f"Showing: {st.session_state.shown} (test client ID {int(row['ID'].iloc[0])})")
-        st.caption(
-            f"Examples are grouped at the saved model's cutoff ({assets.saved_cutoff:.1%}, "
-            "the 5x ratio). At other ratios the decision shown can differ from the group name."
-        )
 
         st.subheader("Change a few things")
-        st.selectbox("Payment behavior", sc.SCENARIOS, key="scenario")
+        st.radio("Payment behavior", sc.SCENARIOS, key="scenario")
         low, high = sc.widen(
             assets.ranges.limit_min, assets.ranges.limit_max, int(row["LIMIT_BAL"].iloc[0])
         )
@@ -190,11 +193,15 @@ with client_tab:
     with right:
         before = sc.score_client(assets.model, row)
         after = sc.score_client(assets.model, edited)
-        st.metric("Probability of default", f"{after:.1%}")
-        decision = "Flag for review" if sc.is_flagged(after, cutoff) else "Don't flag"
-        st.markdown(f"**Decision at the {cutoff:.1%} cutoff:** {decision}")
+        # Red box if the model flags the client, green if not.
+        box = st.error if sc.is_flagged(after, CLIENT_CUTOFF) else st.success
+        box(
+            f"### {sc.prediction_headline(after, CLIENT_CUTOFF)}\n"
+            f"**{after:.1%}** chance of default. The model flags clients at "
+            f"{CLIENT_CUTOFF:.1%} or more."
+        )
         if sc.is_edited(row, edited):
-            st.markdown(f"Your changes moved this client's risk from {before:.1%} to {after:.1%}.")
+            st.markdown(f"**Your changes:** {sc.change_from_original(before, after)}")
         actual = "Yes" if assets.test_y[position] == 1 else "No"
         st.markdown(f"**Did this client actually default?** {actual}")
         st.altair_chart(
@@ -202,14 +209,30 @@ with client_tab:
         )
         st.caption(
             "Each bar is how much one column pushed this client's score up (toward "
-            "default) or down, compared with an average client (SHAP values)."
+            "default) or down, compared with an average client (SHAP values). The "
+            f"cutoff is the saved model's ({CLIENT_CUTOFF:.3f}, from a 5x cost ratio); "
+            "the Cost ratio tab shows other choices."
         )
+
+    # Below both columns, collapsed, so the controls and the result fit on one screen.
+    with st.expander("Client details and payment history"):
         st.dataframe(sc.describe_client(edited), hide_index=True)
         st.dataframe(sc.payment_history(edited), hide_index=True)
 
 # ---- Tab 3: Cost ratio -------------------------------------------------------------
 
 with cost_tab:
+    # A number box with - / + buttons: each click moves the marker one step.
+    ratio = st.number_input(
+        "A missed defaulter costs N times a false alarm", 1, 20, 5, step=1, key="ratio"
+    )
+    cutoff = sc.cutoff_for(ratio)
+    st.markdown(f"Flag clients with a default risk of **{cutoff:.1%}** or more.")
+    st.caption(
+        "Cutoff = 1 / (1 + N), with a false alarm costing 1. The saved model's cutoff at "
+        f"5x came from a search on training data: {assets.saved_cutoff:.3f}. So counts "
+        "at 5x differ slightly from the write-up."
+    )
     outcomes = sc.outcomes_at_ratio(assets.test_y, assets.proba, ratio)
     defaulters = int(assets.test_y.sum())
     payers = len(assets.test_y) - defaulters
@@ -226,10 +249,20 @@ with cost_tab:
     table.index = outcomes["setup"]
     st.dataframe(table)
     st.caption(f"Cost per client: a miss costs {ratio}, a false alarm costs 1, averaged.")
-    marks = pd.DataFrame({"label": [f"cutoff {cutoff:.3f}"], "threshold": [cutoff]})
+    # The current cutoff in orange-red, and 0.5 in gray as a fixed reference (one dot
+    # at 1x, where the two are the same).
+    marks = pd.DataFrame({"label": [f"{ratio}x: cutoff {cutoff:.3f}"], "threshold": [cutoff]})
+    colors = [FLAG_COLOR]
+    if ratio != 1:
+        marks.loc[1] = ["cutoff 0.5", 0.5]
+        colors.append(REFERENCE_COLOR)
     st.altair_chart(
         plot_tradeoff_curves(
-            assets.test_y, assets.proba, marks, points_note=f"the cutoff for {ratio}x"
+            assets.test_y,
+            assets.proba,
+            marks,
+            points_note=f"the cutoff for {ratio}x, and 0.5",
+            colors=colors,
         )
     )
     st.markdown(

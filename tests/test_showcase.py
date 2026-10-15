@@ -15,6 +15,7 @@ from credit_risk.showcase import (
     PLAIN_LABELS,
     SCENARIOS,
     apply_scenario,
+    change_from_original,
     cutoff_for,
     describe_client,
     edit_client,
@@ -25,6 +26,7 @@ from credit_risk.showcase import (
     outcomes_at_ratio,
     payment_history,
     plot_contributions,
+    prediction_headline,
     score_client,
     status_label,
     top_contributions,
@@ -77,6 +79,17 @@ def test_is_flagged_at_the_cutoff():
     # >=, as in the saved model's predict and decision_metrics.
     assert is_flagged(0.2, 0.2)
     assert not is_flagged(0.19, 0.2)
+
+
+def test_prediction_headline_names_the_decision():
+    assert prediction_headline(0.2, 0.2) == "Predicted to default: flag for review"
+    assert prediction_headline(0.19, 0.2) == "Predicted to pay: don't flag"
+
+
+def test_change_from_original_in_percentage_points():
+    assert change_from_original(0.224, 0.345) == "▲ 12.1 points from the original 22.4%"
+    assert change_from_original(0.345, 0.224) == "▼ 12.1 points from the original 34.5%"
+    assert change_from_original(0.3, 0.3) == "No change from the original 30.0%"
 
 
 def test_widen_includes_the_clients_own_value():
