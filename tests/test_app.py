@@ -170,3 +170,18 @@ def test_cost_panel_shows_the_key_numbers_and_follows_the_scroll(app):
     app.number_input(key="ratio").increment().run()
     assert [m.value for m in tab(app, "Cost ratio").metric] != before
     assert any("position: sticky" in m.value for m in app.markdown)
+
+
+def test_about_tab_leads_with_the_headline_numbers(app):
+    about = tab(app, "About")
+    metrics = {m.label: m.value for m in about.metric}
+    assert metrics == {
+        "Test clients the model never saw": "6,000",
+        "Defaulters caught": "77%",
+        "Lower cost per client than cutoff 0.5": "29%",
+        "Cutoff for a 5x cost ratio": "0.17",
+    }
+    text = " ".join(m.value for m in about.markdown)
+    for heading in ("The data", "The model", "The key idea", "The result", "Try a client"):
+        assert heading in text
+    assert "github.com/iangault/credit-default-risk" in text

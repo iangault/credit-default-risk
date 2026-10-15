@@ -106,25 +106,79 @@ about, client_tab, cost_tab = st.tabs(["About", "Try a client", "Cost ratio"])
 
 # ---- Tab 1: About ------------------------------------------------------------------
 
+# The About tab's text, one card per entry. The numbers are the test-set results in
+# docs/results.md (section 6), read once at the end; the app does not recompute them.
+ABOUT_CARDS = [
+    (
+        ":material/database: The data",
+        "30,000 real, anonymized credit card clients of a Taiwanese bank in 2005, "
+        "published by the UCI Machine Learning Repository. About 22% missed the next "
+        "payment.",
+    ),
+    (
+        ":material/model_training: The model",
+        "LightGBM, which ranked clients best of four model types compared with "
+        "cross-validation. Its probabilities are calibrated, so 30% means about 30% of "
+        "such clients default.",
+    ),
+    (
+        ":material/balance: The key idea",
+        "Missing a defaulter costs more than a false alarm on a client who would have "
+        "paid. If a miss costs 5 times as much, the best cutoff is about 0.17, not the "
+        "usual 0.5.",
+    ),
+    (
+        ":material/task_alt: The result",
+        "On 6,000 clients the model never saw, it caught 77% of defaulters. The cost per "
+        "client was 29% lower than with a 0.5 cutoff, using the same model.",
+    ),
+]
+TRY_CARDS = [
+    (
+        ":material/person_search: Try a client",
+        "Pick a real test client, change their payment behavior, credit limit or "
+        "demographics, and watch the prediction and the reasons behind it change.",
+    ),
+    (
+        ":material/tune: Cost ratio",
+        "Click the cost of a miss up or down and see how the cutoff moves, how many "
+        "defaulters are caught, and how many clients who would have paid are flagged.",
+    ),
+]
+
 with about:
     st.header("Who will miss next month's credit card payment?")
     st.markdown(
-        "This app shows a model that predicts whether a credit card client will miss "
-        "next month's payment.\n\n"
-        "- **The data:** 30,000 real, anonymized clients of a Taiwanese bank in 2005, "
-        "published by the UCI Machine Learning Repository.\n"
-        "- **The model:** LightGBM, with probabilities calibrated so that 30% means "
-        "about 30% of such clients default.\n"
-        "- **The key idea:** missing a defaulter costs more than a false alarm on a "
-        "client who would have paid. If a miss costs 5 times as much, the best cutoff is "
-        "about 0.17, not the usual 0.5.\n"
-        "- **The result:** on 6,000 clients the model never saw, it caught 77% of "
-        "defaulters, and the cost per client was 29% lower than with a 0.5 cutoff.\n\n"
-        "**Try a client** lets you pick a real client, change a few things, and see the "
-        "model's prediction at its saved cutoff. **Cost ratio** lets you change how much "
-        "a miss costs and shows what the cutoff then does across all 6,000 clients.\n\n"
-        f"[Code on GitHub]({REPO}) · [Full write-up]({RESULTS})"
+        "A model that ranks credit card clients by their risk of default, and a cutoff "
+        "chosen from what each kind of mistake costs."
     )
+
+    with st.container(border=True):
+        for column, (label, value) in zip(
+            st.columns(4),
+            [
+                ("Test clients the model never saw", "6,000"),
+                ("Defaulters caught", "77%"),
+                ("Lower cost per client than cutoff 0.5", "29%"),
+                ("Cutoff for a 5x cost ratio", "0.17"),
+            ],
+            strict=True,
+        ):
+            column.metric(label, value)
+
+    for column, (title, body) in zip(st.columns(4), ABOUT_CARDS, strict=True):
+        with column.container(border=True, height="stretch"):
+            st.markdown(f"**{title}**")
+            st.markdown(body)
+
+    st.subheader("What to try")
+    for column, (title, body) in zip(st.columns(2), TRY_CARDS, strict=True):
+        with column.container(border=True, height="stretch"):
+            st.markdown(f"**{title}**")
+            st.markdown(body)
+            st.caption("Open the tab above.")
+
+    st.markdown(f":material/code: [Code on GitHub]({REPO}) · [Full write-up]({RESULTS})")
 
 # ---- Tab 2: Try a client -----------------------------------------------------------
 
