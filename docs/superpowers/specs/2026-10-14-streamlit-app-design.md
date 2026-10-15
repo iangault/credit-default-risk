@@ -303,3 +303,7 @@ long to see the effect of a change. These replace the matching parts above:
 - **One accent color** (violet, `#6d28d9`, in `.streamlit/config.toml`) for primary
   buttons, radios, sliders and the number box, apart from the colors that carry
   meaning (red/green prediction, orange-red marker, blue curves).
+- **Try a client:** the result column (prediction box, change line, chart) is sticky
+  like the Cost ratio panel. The client's data is a full-width panel below, "The data
+  the model reads for this client", with recorded and changed values side by side and
+  the changed cells highlighted (bills have one column, since no scenario edits them).

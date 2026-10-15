@@ -246,7 +246,6 @@ def describe_client(row: pd.DataFrame) -> pd.DataFrame:
         "Sex": SEX_LABELS[int(client["SEX"])],
         "Education": EDUCATION_LABELS[int(client["EDUCATION"])],
         "Marital status": MARRIAGE_LABELS[int(client["MARRIAGE"])],
-        "Most recent payment": status_label(int(client["PAY_1"])),
     }
     return pd.DataFrame({"Detail": list(details), "Value": list(details.values())})
 
@@ -262,6 +261,55 @@ def payment_history(row: pd.DataFrame) -> pd.DataFrame:
             "Payment (NT$)": [f"{client[c]:,.0f}" for c in PAY_AMTS],
         }
     )
+
+
+# In the comparison tables: each "with your changes" column and the recorded column it
+# is compared with. change_styles marks the cells where the two differ.
+CHANGED_COLUMNS = {
+    "With your changes": "Recorded",
+    "Status: with your changes": "Status: recorded",
+    "Payment (NT$): with your changes": "Payment (NT$): recorded",
+}
+CHANGED_STYLE = "background-color: rgba(109, 40, 217, 0.18); font-weight: 600"  # pale violet
+
+
+def compare_details(original: pd.DataFrame, edited: pd.DataFrame) -> pd.DataFrame:
+    """describe_client for the recorded row and the edited one, side by side."""
+    recorded, changed = describe_client(original), describe_client(edited)
+    return pd.DataFrame(
+        {
+            "Detail": recorded["Detail"],
+            "Recorded": recorded["Value"],
+            "With your changes": changed["Value"],
+        }
+    )
+
+
+def compare_history(original: pd.DataFrame, edited: pd.DataFrame) -> pd.DataFrame:
+    """payment_history for both rows. Bills never change (no scenario edits them), so
+    they get one column; status and payment get a recorded and a changed column each."""
+    recorded, changed = payment_history(original), payment_history(edited)
+    return pd.DataFrame(
+        {
+            "Month": recorded["Month"],
+            "Bill (NT$)": recorded["Bill (NT$)"],
+            "Status: recorded": recorded["Status"],
+            "Status: with your changes": changed["Status"],
+            "Payment (NT$): recorded": recorded["Payment (NT$)"],
+            "Payment (NT$): with your changes": changed["Payment (NT$)"],
+        }
+    )
+
+
+def change_styles(table: pd.DataFrame) -> pd.DataFrame:
+    """CSS for each cell of a comparison table: CHANGED_STYLE where a "with your changes"
+    value differs from its recorded value, empty elsewhere. For pandas' Styler.apply
+    with axis=None, which st.dataframe renders."""
+    styles = pd.DataFrame("", index=table.index, columns=table.columns)
+    for changed, recorded in CHANGED_COLUMNS.items():
+        if changed in table:
+            styles.loc[table[changed] != table[recorded], changed] = CHANGED_STYLE
+    return styles
 
 
 def score_client(model: TunedThresholdClassifierCV, row: pd.DataFrame) -> float:

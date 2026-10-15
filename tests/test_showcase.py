@@ -10,12 +10,16 @@ from credit_risk.decision import train_final
 from credit_risk.evaluate import decision_metrics
 from credit_risk.explain import inner_pipeline, nearest_to_median
 from credit_risk.showcase import (
+    CHANGED_COLUMNS,
     EXAMPLE_LABELS,
     MONTHS,
     PLAIN_LABELS,
     SCENARIOS,
     apply_scenario,
     change_from_original,
+    change_styles,
+    compare_details,
+    compare_history,
     cutoff_for,
     describe_client,
     edit_client,
@@ -137,7 +141,8 @@ def test_describe_client_in_plain_words(row):
     assert table["Sex"] == "Female"
     assert table["Education"] == "University"
     assert table["Marital status"] == "Married"
-    assert table["Most recent payment"] == "1 month late"
+    # The repayment status is in the payment history, so it is not repeated here.
+    assert "Most recent payment" not in table.index
 
 
 def test_payment_history_has_six_months_newest_first(row):
@@ -304,3 +309,37 @@ def test_load_assets_examples_are_in_their_groups(assets):
     assert y[assets.examples["missed"]] == 1 and not flagged[assets.examples["missed"]]
     assert y[assets.examples["false_alarm"]] == 0 and flagged[assets.examples["false_alarm"]]
     assert y[assets.examples["cleared"]] == 0 and not flagged[assets.examples["cleared"]]
+
+
+def test_compare_details_shows_recorded_and_changed_values(row):
+    edited = edit_client(row, "As recorded", 80_000, {"SEX": 1})
+    table = compare_details(row, edited).set_index("Detail")
+    assert list(table.columns) == ["Recorded", "With your changes"]
+    assert table.loc["Credit limit"].tolist() == ["50,000 NT$", "80,000 NT$"]
+    assert table.loc["Sex"].tolist() == ["Female", "Male"]
+    assert table.loc["Age", "Recorded"] == table.loc["Age", "With your changes"]
+
+
+def test_compare_history_keeps_one_bill_column(row):
+    edited = edit_client(row, "Pays in full every month", 50_000, {})
+    table = compare_history(row, edited)
+    assert list(table.columns) == [
+        "Month",
+        "Bill (NT$)",
+        "Status: recorded",
+        "Status: with your changes",
+        "Payment (NT$): recorded",
+        "Payment (NT$): with your changes",
+    ]
+    assert table["Status: recorded"].iloc[0] == "1 month late"
+    assert table["Status: with your changes"].iloc[0] == "Paid in full"
+
+
+def test_change_styles_marks_only_changed_cells(row):
+    edited = edit_client(row, "As recorded", 80_000, {})
+    styles = change_styles(compare_details(row, edited))
+    marked = styles["With your changes"] != ""
+    # Only the credit limit changed, so only its "with your changes" cell is marked.
+    assert marked.tolist() == [True, False, False, False, False]
+    assert (styles.drop(columns="With your changes") == "").all().all()
+    assert set(CHANGED_COLUMNS) >= {"With your changes", "Status: with your changes"}

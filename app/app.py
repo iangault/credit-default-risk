@@ -114,6 +114,25 @@ def open_tab(label: str) -> None:
     st.session_state.view = label
 
 
+# Keeps one column of a tab in view while the other scrolls past: the result on Try a
+# client, and the ratio with its counts on Cost ratio. Streamlit gives a container with
+# key="result_panel" the CSS class st-key-result_panel; :has() finds the column holding
+# it. Only on screens wide enough for side-by-side columns: on a phone they stack and a
+# sticky panel would cover what is below it.
+STICKY_PANELS = """
+<style>
+@media (min-width: 640px) {
+  [data-testid="stColumn"]:has(.st-key-result_panel),
+  [data-testid="stColumn"]:has(.st-key-ratio_panel) {
+    position: sticky;
+    top: 4rem;
+    align-self: flex-start;
+  }
+}
+</style>
+"""
+st.markdown(STICKY_PANELS, unsafe_allow_html=True)
+
 # Above the tabs, so it shows on every tab.
 st.title(TITLE)
 # key + on_change="rerun" make the selected tab part of session_state, so a button can
@@ -286,7 +305,7 @@ with client_tab:
     demographics = {column: st.session_state[column] for column in sc.DEMOGRAPHICS}
     edited = sc.edit_client(row, st.session_state.scenario, st.session_state.limit, demographics)
 
-    with right:
+    with right, st.container(key="result_panel"):
         before = sc.score_client(assets.model, row)
         after = sc.score_client(assets.model, edited)
         # Red box if the model flags the client, green if not.
@@ -314,32 +333,29 @@ with client_tab:
             "the Cost ratio tab shows other choices."
         )
 
-    # Below both columns, collapsed, so the controls and the result fit on one screen.
-    with st.expander("Client details and payment history"):
-        st.dataframe(sc.describe_client(edited), hide_index=True)
-        st.dataframe(sc.payment_history(edited), hide_index=True)
+    # Below both columns, full width: the data itself, recorded and edited side by side,
+    # kept apart from the controls and the result above.
+    with st.container(border=True):
+        st.markdown("#### :material/table_view: The data the model reads for this client")
+        st.caption(
+            "**Recorded** is the client's real (anonymized) data from the 2005 dataset. "
+            "**With your changes** is the same data after the controls above; the "
+            "prediction is scored on it. Highlighted cells are the ones your changes "
+            "altered. These are all 23 columns the model reads."
+        )
+        details = sc.compare_details(row, edited)
+        history = sc.compare_history(row, edited)
+        facts, months = st.columns([2, 5], gap="large")
+        with facts:
+            st.markdown("**Details**")
+            st.dataframe(details.style.apply(sc.change_styles, axis=None), hide_index=True)
+        with months:
+            st.markdown("**Last six months, newest first**")
+            st.dataframe(history.style.apply(sc.change_styles, axis=None), hide_index=True)
 
 # ---- Tab 3: Cost ratio -------------------------------------------------------------
 
-# Keeps the Cost ratio tab's left column (the ratio and its key numbers) in view while
-# the table and charts scroll past. Streamlit gives a container with key="ratio_panel"
-# the CSS class st-key-ratio_panel; :has() finds the column holding it. Only on screens
-# wide enough for side-by-side columns: on a phone they stack and a sticky panel would
-# cover the charts.
-STICKY_PANEL = """
-<style>
-@media (min-width: 640px) {
-  [data-testid="stColumn"]:has(.st-key-ratio_panel) {
-    position: sticky;
-    top: 4rem;
-    align-self: flex-start;
-  }
-}
-</style>
-"""
-
 with cost_tab:
-    st.markdown(STICKY_PANEL, unsafe_allow_html=True)
     panel, main = st.columns([1, 3], gap="large")
 
     with panel, st.container(key="ratio_panel"):

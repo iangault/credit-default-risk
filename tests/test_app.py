@@ -140,9 +140,16 @@ def test_your_changes_line_is_colored_by_direction(app):
     assert ":green[▼" in change[0]
 
 
-def test_client_details_are_in_a_collapsed_section(app):
-    labels = [e.label for e in tab(app, "Try a client").expander]
-    assert "Client details and payment history" in labels
+def test_client_data_is_a_full_width_panel_comparing_recorded_and_changed(app):
+    client = tab(app, "Try a client")
+    assert any("The data the model reads for this client" in m.value for m in client.markdown)
+    assert not [e for e in client.expander if "payment history" in e.label]
+    assert len(client.dataframe) == 2
+
+
+def test_result_column_follows_the_scroll(app):
+    # As on the Cost ratio tab: the CSS rule is checked, not the scrolling (no browser).
+    assert any("st-key-result_panel" in m.value for m in app.markdown)
 
 
 def test_client_above_the_limit_range_renders(app):
