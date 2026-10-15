@@ -1,5 +1,11 @@
 # credit-default-risk
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://credit-default-risk-2005-taiwan.streamlit.app/)
+[![CI](https://github.com/iangault/credit-default-risk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/iangault/credit-default-risk/actions/workflows/ci.yml)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Data: UCI](https://img.shields.io/badge/data-UCI%20ML%20Repository-lightgrey.svg)](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients)
+
 Predicting whether a credit card client will miss next month's payment, built as a
 modular, reproducible ML pipeline.
 
